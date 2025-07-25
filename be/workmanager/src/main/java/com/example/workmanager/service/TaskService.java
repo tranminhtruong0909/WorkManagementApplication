@@ -21,6 +21,13 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final GroupRepository groupRepository;
 
+    public List<TaskResponse> getAllTasks() {
+        return taskRepository.findAll()
+                .stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
     public Task createTask(String name, Integer groupId, String status,
                            LocalDate dueDate, LocalDate timelineStart,
                            LocalDate timelineEnd, String notes) {

@@ -2,9 +2,11 @@ package com.example.workmanager.controller;
 
 import com.example.workmanager.dto.LoginRequest;
 import com.example.workmanager.dto.RegisterRequest;
+import com.example.workmanager.dto.UserResponse;
 import com.example.workmanager.model.User;
 import com.example.workmanager.repository.UserRepository;
 import com.example.workmanager.service.AuthService;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+
 public class AuthController {
 
     private final AuthService authService;
@@ -22,9 +25,7 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
             User user = authService.login(request);
-            // Remove password hash from response
-            user.setPassword(null);
-            return ResponseEntity.ok(user);
+            return ResponseEntity.ok(new UserResponse(user));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
@@ -34,9 +35,7 @@ public class AuthController {
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         try {
             User user = authService.register(request);
-            // Remove password hash from response
-            user.setPassword(null);
-            return ResponseEntity.ok(user);
+            return ResponseEntity.ok(new UserResponse(user));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
@@ -45,10 +44,8 @@ public class AuthController {
     @GetMapping("/users/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Integer id) {
         return userRepository.findById(id)
-                .map(user -> {
-                    user.setPassword(null); // Remove password hash
-                    return ResponseEntity.ok(user);
-                })
+                .map(user -> ResponseEntity.ok(new UserResponse(user)))
                 .orElse(ResponseEntity.notFound().build());
     }
+
 }

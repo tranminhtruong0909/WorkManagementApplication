@@ -6,6 +6,7 @@ import com.example.workmanager.service.BoardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -16,12 +17,14 @@ public class BoardController {
 
     private final BoardService boardService;
 
+    // ✅ Lấy danh sách tất cả board
     @GetMapping
     public ResponseEntity<List<Board>> getAllBoards() {
         List<Board> boards = boardService.getAllBoards();
         return ResponseEntity.ok(boards);
     }
 
+    // ✅ Lấy 1 board theo id
     @GetMapping("/{id}")
     public ResponseEntity<Board> getBoardById(@PathVariable Integer id) {
         return boardService.getBoardById(id)
@@ -29,6 +32,7 @@ public class BoardController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ✅ Tạo mới board
     @PostMapping
     public ResponseEntity<Board> createBoard(@RequestBody Board board) {
         try {
@@ -39,6 +43,7 @@ public class BoardController {
         }
     }
 
+    // ✅ Cập nhật thông tin board
     @PutMapping("/{id}")
     public ResponseEntity<Board> updateBoard(@PathVariable Integer id, @RequestBody Board board) {
         try {
@@ -49,6 +54,7 @@ public class BoardController {
         }
     }
 
+    // ✅ Xoá board
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteBoard(@PathVariable Integer id) {
         try {
@@ -59,6 +65,7 @@ public class BoardController {
         }
     }
 
+    // ✅ Lấy danh sách group thuộc 1 board
     @GetMapping("/{id}/groups")
     public ResponseEntity<List<Group>> getGroupsByBoardId(@PathVariable Integer id) {
         List<Group> groups = boardService.getGroupsByBoardId(id);

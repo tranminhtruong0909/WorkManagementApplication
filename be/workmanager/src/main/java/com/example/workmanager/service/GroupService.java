@@ -20,6 +20,7 @@ public class GroupService {
     private final BoardRepository boardRepository;
     private final TaskRepository taskRepository;
 
+    // ✅ Tạo group mới
     public Group createGroup(String name, Integer boardId) {
         Board board = boardRepository.findById(boardId)
                 .orElseThrow(() -> new RuntimeException("Board not found with id: " + boardId));
@@ -31,6 +32,7 @@ public class GroupService {
         return groupRepository.save(group);
     }
 
+    // ✅ Cập nhật group
     public Group updateGroup(Integer id, String name) {
         Group group = groupRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Group not found with id: " + id));
@@ -39,16 +41,24 @@ public class GroupService {
         return groupRepository.save(group);
     }
 
+    // ✅ Xoá group
     public void deleteGroup(Integer id) {
         Group group = groupRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Group not found with id: " + id));
         groupRepository.delete(group);
     }
 
+    // ✅ Lấy group theo ID
     public Optional<Group> getGroupById(Integer id) {
         return groupRepository.findById(id);
     }
 
+    // ✅ Lấy toàn bộ group
+    public List<Group> getAllGroups() {
+        return groupRepository.findAll();
+    }
+
+    // ✅ Lấy task trong group (nếu cần dùng trực tiếp tại đây)
     public List<Task> getTasksByGroupId(Integer groupId) {
         return taskRepository.findByGroupId(groupId);
     }
