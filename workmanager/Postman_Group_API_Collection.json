@@ -1,0 +1,730 @@
+{
+  "info": {
+    "name": "WorkManager - Group API Tests",
+    "description": "Collection để test các API Groups trong WorkManager",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testUserId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "testBoardId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "testGroupId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "1. Login để lấy token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('authToken', response.token);",
+                  "    console.log('Token saved:', response.token);",
+                  "}",
+                  "",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has token', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('token');",
+                  "    pm.expect(response).to.have.property('user');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Test Authentication",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/test-auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "test-auth"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('User is authenticated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.authenticated).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📋 Board Management (Setup)",
+      "item": [
+        {
+          "name": "1. Create Test Board",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Board for Groups\",\n  \"description\": \"Board để test Groups API\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/boards",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "boards"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('testBoardId', response.id);",
+                  "    console.log('Board created with ID:', response.id);",
+                  "}",
+                  "",
+                  "pm.test('Board has required fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('id');",
+                  "    pm.expect(response).to.have.property('name');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Get All Boards",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/boards",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "boards"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "📁 Group API Tests",
+      "item": [
+        {
+          "name": "1. Create Group - Success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Development Team\",\n  \"boardId\": {{testBoardId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('testGroupId', response.id);",
+                  "    console.log('Group created with ID:', response.id);",
+                  "}",
+                  "",
+                  "pm.test('Group has required fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('id');",
+                  "    pm.expect(response).to.have.property('name');",
+                  "    pm.expect(response).to.have.property('boardId');",
+                  "    pm.expect(response).to.have.property('boardName');",
+                  "    pm.expect(response.name).to.eql('Development Team');",
+                  "    pm.expect(response.boardId).to.eql(parseInt(pm.collectionVariables.get('testBoardId')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Create Group - Missing Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"boardId\": {{testBoardId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message contains missing name', function () {",
+                  "    const response = pm.response.text();",
+                  "    pm.expect(response).to.include('Missing');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Create Group - Missing BoardId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Group\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message contains missing boardId', function () {",
+                  "    const response = pm.response.text();",
+                  "    pm.expect(response).to.include('Missing');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Create Group - Invalid BoardId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Group\",\n  \"boardId\": \"invalid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message contains invalid format', function () {",
+                  "    const response = pm.response.text();",
+                  "    pm.expect(response).to.include('Invalid');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Get All Groups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Groups have required fields', function () {",
+                  "    const response = pm.response.json();",
+                  "    if (response.length > 0) {",
+                  "        const group = response[0];",
+                  "        pm.expect(group).to.have.property('id');",
+                  "        pm.expect(group).to.have.property('name');",
+                  "        pm.expect(group).to.have.property('boardId');",
+                  "        pm.expect(group).to.have.property('boardName');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Get Group By ID - Success",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{testGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "{{testGroupId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Group has correct data', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('id');",
+                  "    pm.expect(response).to.have.property('name');",
+                  "    pm.expect(response).to.have.property('boardId');",
+                  "    pm.expect(response).to.have.property('boardName');",
+                  "    pm.expect(response.id).to.eql(parseInt(pm.collectionVariables.get('testGroupId')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Get Group By ID - Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "99999"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Update Group - Success",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Development Team\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{testGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "{{testGroupId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Group name is updated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.name).to.eql('Updated Development Team');",
+                  "    pm.expect(response.id).to.eql(parseInt(pm.collectionVariables.get('testGroupId')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Update Group - Missing Name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{testGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "{{testGroupId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message contains missing name', function () {",
+                  "    const response = pm.response.text();",
+                  "    pm.expect(response).to.include('Missing');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Update Group - Not Found",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "99999"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Delete Group - Success",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{testGroupId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "{{testGroupId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Delete Group - Not Found",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "99999"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13. Get Tasks By Group ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/{{testGroupId}}/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "{{testGroupId}}", "tasks"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14. Get Tasks By Group ID - Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/groups/99999/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "groups", "99999", "tasks"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔧 Test Data Cleanup",
+      "item": [
+        {
+          "name": "Delete Test Board",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/boards/{{testBoardId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "boards", "{{testBoardId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('Test cleanup completed');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+} 

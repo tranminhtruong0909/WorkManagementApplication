@@ -1,0 +1,567 @@
+package view;
+
+import controller.SanPhamController;
+import model.SanPham;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.File;
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.util.List;
+import java.util.ArrayList;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import utils.DatabaseUtil;
+
+public class SanPhamView extends JPanel {
+    private SanPhamController controller;
+    private JPanel mainPanel, formPanel, tablePanel, buttonPanel, imagePanel;
+    private JTextField txtId, txtTen, txtDonGia, txtSoLuong, txtMoTa, txtHinhAnh, txtThoiGianChuanBi, txtSearch;
+    private JComboBox<String> cboDanhMuc, cboTrangThai, cboDanhMucSearch;
+    private JButton btnThem, btnSua, btnXoa, btnLamMoi, btnTimKiem, btnChonAnh;
+    private JTable table;
+    private DefaultTableModel tableModel;
+    private JLabel lblPreview;
+    private JCheckBox chkCoBanMangVe, chkCoBanTaiQuan;
+    private Color primaryColor = new Color(121, 85, 72); // Nâu đậm
+    private Color secondaryColor = new Color(188, 170, 164); // Nâu nhạt
+    private Color accentColor = new Color(62, 39, 35); // Nâu rất đậm
+    private Color backgroundColor = new Color(245, 245, 245); // Xám nhạt
+    private Color successColor = new Color(76, 175, 80); // Xanh lá
+    private Color warningColor = new Color(255, 152, 0); // Cam
+    private Color dangerColor = new Color(244, 67, 54); // Đỏ
+    private JProgressBar progressBar;
+    private NumberFormat currencyFormat;
+
+    public SanPhamView() {
+        controller = new SanPhamController();
+        currencyFormat = NumberFormat.getCurrencyInstance();
+        setLayout(new BorderLayout());
+        setBackground(backgroundColor);
+        createMainPanel();
+        loadData();
+        loadCategories();
+    }
+
+    private void createMainPanel() {
+        mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        mainPanel.setBackground(backgroundColor);
+
+        // Panel form
+        formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(primaryColor, 2),
+                "Thông tin sản phẩm",
+                TitledBorder.LEFT,
+                TitledBorder.TOP,
+                new Font("Arial", Font.BOLD, 14),
+                primaryColor));
+        formPanel.setPreferredSize(new Dimension(420, 600));
+        formPanel.setBackground(Color.WHITE);
+        createFormPanel();
+        mainPanel.add(formPanel, BorderLayout.WEST);
+
+        // Panel table
+        tablePanel = new JPanel(new BorderLayout(5, 10));
+        tablePanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(primaryColor, 2),
+                "Danh sách sản phẩm",
+                TitledBorder.LEFT,
+                TitledBorder.TOP,
+                new Font("Arial", Font.BOLD, 14),
+                primaryColor));
+        tablePanel.setBackground(Color.WHITE);
+        createTablePanel();
+        mainPanel.add(tablePanel, BorderLayout.CENTER);
+
+        // Panel button
+        buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 10));
+        buttonPanel.setBackground(backgroundColor);
+        createButtonPanel();
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        progressBar = new JProgressBar();
+        progressBar.setVisible(false);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Đang xử lý...");
+        mainPanel.add(progressBar, BorderLayout.NORTH);
+
+        add(mainPanel);
+    }
+
+    private void createFormPanel() {
+        formPanel.setBackground(Color.WHITE);
+        Font labelFont = new Font("Arial", Font.BOLD, 13);
+        Font fieldFont = new Font("Arial", Font.PLAIN, 13);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(8, 8, 8, 8);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+
+        // ID
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel lblId = new JLabel("ID:");
+        lblId.setFont(labelFont);
+        lblId.setForeground(primaryColor);
+        lblId.setToolTipText("ID tự động sinh, không cần nhập");
+        formPanel.add(lblId, gbc);
+        gbc.gridx = 1; gbc.gridy = 0;
+        txtId = new JTextField();
+        txtId.setEditable(false);
+        txtId.setBackground(new Color(245, 245, 245));
+        txtId.setFont(fieldFont);
+        txtId.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtId, gbc);
+
+        // Tên sản phẩm
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel lblTen = new JLabel("Tên sản phẩm *:");
+        lblTen.setFont(labelFont);
+        lblTen.setForeground(primaryColor);
+        lblTen.setToolTipText("Nhập tên sản phẩm (2-200 ký tự)");
+        formPanel.add(lblTen, gbc);
+        gbc.gridx = 1; gbc.gridy = 1;
+        txtTen = new JTextField();
+        txtTen.setFont(fieldFont);
+        txtTen.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(primaryColor),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtTen, gbc);
+
+        // Danh mục
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel lblDanhMuc = new JLabel("Danh mục *:");
+        lblDanhMuc.setFont(labelFont);
+        lblDanhMuc.setForeground(primaryColor);
+        lblDanhMuc.setToolTipText("Chọn danh mục sản phẩm");
+        formPanel.add(lblDanhMuc, gbc);
+        gbc.gridx = 1; gbc.gridy = 2;
+        cboDanhMuc = new JComboBox<>();
+        cboDanhMuc.setFont(fieldFont);
+        cboDanhMuc.setBackground(Color.WHITE);
+        formPanel.add(cboDanhMuc, gbc);
+
+        // Đơn giá
+        gbc.gridx = 0; gbc.gridy = 3;
+        JLabel lblDonGia = new JLabel("Đơn giá *:");
+        lblDonGia.setFont(labelFont);
+        lblDonGia.setForeground(primaryColor);
+        lblDonGia.setToolTipText("Nhập giá (số lớn hơn 0)");
+        formPanel.add(lblDonGia, gbc);
+        gbc.gridx = 1; gbc.gridy = 3;
+        txtDonGia = new JTextField();
+        txtDonGia.setFont(fieldFont);
+        txtDonGia.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(primaryColor),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtDonGia, gbc);
+
+        // Số lượng
+        gbc.gridx = 0; gbc.gridy = 4;
+        JLabel lblSoLuong = new JLabel("Số lượng *:");
+        lblSoLuong.setFont(labelFont);
+        lblSoLuong.setForeground(primaryColor);
+        lblSoLuong.setToolTipText("Nhập số lượng (số không âm)");
+        formPanel.add(lblSoLuong, gbc);
+        gbc.gridx = 1; gbc.gridy = 4;
+        txtSoLuong = new JTextField();
+        txtSoLuong.setFont(fieldFont);
+        txtSoLuong.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(primaryColor),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtSoLuong, gbc);
+
+        // Mô tả
+        gbc.gridx = 0; gbc.gridy = 5;
+        JLabel lblMoTa = new JLabel("Mô tả:");
+        lblMoTa.setFont(labelFont);
+        lblMoTa.setForeground(primaryColor);
+        lblMoTa.setToolTipText("Mô tả sản phẩm (tối đa 1000 ký tự)");
+        formPanel.add(lblMoTa, gbc);
+        gbc.gridx = 1; gbc.gridy = 5;
+        txtMoTa = new JTextField();
+        txtMoTa.setFont(fieldFont);
+        txtMoTa.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtMoTa, gbc);
+
+        // Hình ảnh và Preview
+        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2;
+        JLabel lblHinhAnh = new JLabel("Hình ảnh:");
+        lblHinhAnh.setFont(labelFont);
+        lblHinhAnh.setForeground(primaryColor);
+        formPanel.add(lblHinhAnh, gbc);
+        
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
+        imagePanel = new JPanel(new BorderLayout(5, 5));
+        imagePanel.setBackground(Color.WHITE);
+        JPanel inputPanel = new JPanel(new BorderLayout(5, 0));
+        inputPanel.setBackground(Color.WHITE);
+        txtHinhAnh = new JTextField();
+        txtHinhAnh.setFont(fieldFont);
+        txtHinhAnh.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        btnChonAnh = new JButton("Chọn ảnh");
+        btnChonAnh.setFont(new Font("Arial", Font.BOLD, 11));
+        btnChonAnh.setBackground(primaryColor);
+        btnChonAnh.setForeground(Color.WHITE);
+        btnChonAnh.setFocusPainted(false);
+        btnChonAnh.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        btnChonAnh.addActionListener(e -> chonAnh());
+        inputPanel.add(txtHinhAnh, BorderLayout.CENTER);
+        inputPanel.add(btnChonAnh, BorderLayout.EAST);
+        imagePanel.add(inputPanel, BorderLayout.NORTH);
+        
+        lblPreview = new JLabel("Chưa có ảnh");
+        lblPreview.setFont(new Font("Arial", Font.ITALIC, 12));
+        lblPreview.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        lblPreview.setPreferredSize(new Dimension(150, 120));
+        lblPreview.setHorizontalAlignment(JLabel.CENTER);
+        lblPreview.setVerticalAlignment(JLabel.CENTER);
+        lblPreview.setBackground(new Color(250, 250, 250));
+        lblPreview.setOpaque(true);
+        imagePanel.add(lblPreview, BorderLayout.CENTER);
+        formPanel.add(imagePanel, gbc);
+
+        // Thời gian chuẩn bị
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 1;
+        JLabel lblThoiGianChuanBi = new JLabel("Thời gian chuẩn bị (phút):");
+        lblThoiGianChuanBi.setFont(labelFont);
+        lblThoiGianChuanBi.setForeground(primaryColor);
+        lblThoiGianChuanBi.setToolTipText("Nhập thời gian chuẩn bị (phút, không âm)");
+        formPanel.add(lblThoiGianChuanBi, gbc);
+        gbc.gridx = 1; gbc.gridy = 8;
+        txtThoiGianChuanBi = new JTextField();
+        txtThoiGianChuanBi.setFont(fieldFont);
+        txtThoiGianChuanBi.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        formPanel.add(txtThoiGianChuanBi, gbc);
+
+        // Checkboxes
+        gbc.gridx = 0; gbc.gridy = 9; gbc.gridwidth = 2;
+        JPanel checkPanel = new JPanel(new GridLayout(2, 1, 5, 5));
+        checkPanel.setBackground(Color.WHITE);
+        
+        chkCoBanMangVe = new JCheckBox("Có bán mang về");
+        chkCoBanMangVe.setFont(labelFont);
+        chkCoBanMangVe.setForeground(primaryColor);
+        chkCoBanMangVe.setBackground(Color.WHITE);
+        
+        chkCoBanTaiQuan = new JCheckBox("Có bán tại quán");
+        chkCoBanTaiQuan.setFont(labelFont);
+        chkCoBanTaiQuan.setForeground(primaryColor);
+        chkCoBanTaiQuan.setBackground(Color.WHITE);
+        
+        checkPanel.add(chkCoBanMangVe);
+        checkPanel.add(chkCoBanTaiQuan);
+        formPanel.add(checkPanel, gbc);
+
+        // Trạng thái
+        gbc.gridx = 0; gbc.gridy = 10; gbc.gridwidth = 1;
+        JLabel lblTrangThai = new JLabel("Trạng thái *:");
+        lblTrangThai.setFont(labelFont);
+        lblTrangThai.setForeground(primaryColor);
+        lblTrangThai.setToolTipText("Chọn trạng thái sản phẩm");
+        formPanel.add(lblTrangThai, gbc);
+        gbc.gridx = 1; gbc.gridy = 10;
+        cboTrangThai = new JComboBox<>(new String[]{"Còn", "Ngừng bán"});
+        cboTrangThai.setFont(fieldFont);
+        cboTrangThai.setBackground(Color.WHITE);
+        formPanel.add(cboTrangThai, gbc);
+    }
+
+    private void createTablePanel() {
+        tablePanel.setBackground(Color.WHITE);
+        
+        // Sửa lại columns để hiển thị đầy đủ thông tin sản phẩm
+        String[] columnNames = {"ID", "Tên sản phẩm", "Danh mục", "Đơn giá", "Số lượng", 
+                               "Thời gian CB (phút)", "Mang về", "Tại quán", "Trạng thái"};
+        
+        tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override 
+            public boolean isCellEditable(int row, int column) { 
+                return false; 
+            }
+            
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                switch (columnIndex) {
+                    case 0: return Integer.class;    // ID
+                    case 3: return String.class;     // Đơn giá (formatted)
+                    case 4: return Integer.class;    // Số lượng
+                    case 5: return Integer.class;    // Thời gian
+                    case 6: case 7: return String.class; // Boolean as String
+                    default: return String.class;
+                }
+            }
+        };
+        
+        table = new JTable(tableModel);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setRowHeight(32);
+        table.setGridColor(new Color(200, 200, 200));
+        table.setFont(new Font("Arial", Font.PLAIN, 12));
+        table.setBackground(Color.WHITE);
+        table.setSelectionBackground(secondaryColor);
+        table.setSelectionForeground(Color.BLACK);
+        table.setShowVerticalLines(true);
+        table.setShowHorizontalLines(true);
+        
+        // Header styling
+        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
+        table.getTableHeader().setBackground(primaryColor);
+        table.getTableHeader().setForeground(Color.WHITE);
+        table.getTableHeader().setPreferredSize(new Dimension(0, 35));
+        table.getTableHeader().setBorder(BorderFactory.createRaisedBorder());
+        
+        // Set column widths
+        int[] columnWidths = {50, 180, 120, 100, 80, 100, 80, 80, 100};
+        for (int i = 0; i < columnWidths.length; i++) {
+            table.getColumnModel().getColumn(i).setPreferredWidth(columnWidths[i]);
+        }
+        
+        // Center alignment for numeric columns
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+        table.getColumnModel().getColumn(0).setCellRenderer(centerRenderer); // ID
+        table.getColumnModel().getColumn(3).setCellRenderer(centerRenderer); // Đơn giá
+        table.getColumnModel().getColumn(4).setCellRenderer(centerRenderer); // Số lượng
+        table.getColumnModel().getColumn(5).setCellRenderer(centerRenderer); // Thời gian
+        table.getColumnModel().getColumn(6).setCellRenderer(centerRenderer); // Mang về
+        table.getColumnModel().getColumn(7).setCellRenderer(centerRenderer); // Tại quán
+        
+        // Custom renderer for status column
+        DefaultTableCellRenderer statusRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                if (!isSelected) {
+                    if ("Còn".equals(value)) {
+                        c.setBackground(new Color(220, 255, 220));
+                        c.setForeground(new Color(0, 120, 0));
+                    } else {
+                        c.setBackground(new Color(255, 220, 220));
+                        c.setForeground(new Color(120, 0, 0));
+                    }
+                }
+                setHorizontalAlignment(JLabel.CENTER);
+                return c;
+            }
+        };
+        table.getColumnModel().getColumn(8).setCellRenderer(statusRenderer);
+        
+        table.addMouseListener(new MouseAdapter() {
+            @Override 
+            public void mouseClicked(MouseEvent e) {
+                int selectedRow = table.getSelectedRow();
+                if (selectedRow >= 0) displaySelected(selectedRow);
+            }
+        });
+        
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(BorderFactory.createLineBorder(primaryColor, 1));
+        scrollPane.getViewport().setBackground(Color.WHITE);
+        tablePanel.add(scrollPane, BorderLayout.CENTER);
+
+        // Search panel
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        searchPanel.setBackground(Color.WHITE);
+        searchPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(primaryColor, 1),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        
+        JLabel lblSearch = new JLabel("Tìm kiếm:");
+        lblSearch.setFont(new Font("Arial", Font.BOLD, 13));
+        lblSearch.setForeground(primaryColor);
+        
+        txtSearch = new JTextField(20);
+        txtSearch.setFont(new Font("Arial", Font.PLAIN, 13));
+        txtSearch.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(primaryColor),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)));
+        
+        JLabel lblDanhMucSearch = new JLabel("Danh mục:");
+        lblDanhMucSearch.setFont(new Font("Arial", Font.BOLD, 13));
+        lblDanhMucSearch.setForeground(primaryColor);
+        
+        cboDanhMucSearch = new JComboBox<>();
+        cboDanhMucSearch.setFont(new Font("Arial", Font.PLAIN, 13));
+        cboDanhMucSearch.addItem("Tất cả");
+        cboDanhMucSearch.setBackground(Color.WHITE);
+        
+        btnTimKiem = new JButton("Tìm kiếm");
+        btnTimKiem.setFont(new Font("Arial", Font.BOLD, 12));
+        btnTimKiem.setBackground(successColor);
+        btnTimKiem.setForeground(Color.WHITE);
+        btnTimKiem.setFocusPainted(false);
+        btnTimKiem.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
+        btnTimKiem.addActionListener(e -> timKiem());
+        
+        searchPanel.add(lblSearch);
+        searchPanel.add(txtSearch);
+        searchPanel.add(lblDanhMucSearch);
+        searchPanel.add(cboDanhMucSearch);
+        searchPanel.add(btnTimKiem);
+        tablePanel.add(searchPanel, BorderLayout.NORTH);
+    }
+
+    private void createButtonPanel() {
+        buttonPanel.setBackground(backgroundColor);
+        
+        btnThem = createStyledButton("Thêm", successColor);
+        btnThem.addActionListener(e -> them());
+        
+        btnSua = createStyledButton("Sửa", warningColor);
+        btnSua.addActionListener(e -> sua());
+        
+        btnXoa = createStyledButton("Xóa", dangerColor);
+        btnXoa.addActionListener(e -> xoa());
+        
+        btnLamMoi = createStyledButton("Làm mới", primaryColor);
+        btnLamMoi.addActionListener(e -> lamMoiForm());
+        
+        buttonPanel.add(btnThem);
+        buttonPanel.add(btnSua);
+        buttonPanel.add(btnXoa);
+        buttonPanel.add(btnLamMoi);
+    }
+    
+    private JButton createStyledButton(String text, Color bgColor) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Arial", Font.BOLD, 13));
+        button.setBackground(bgColor);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        // Hover effect
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(bgColor.darker());
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(bgColor);
+            }
+        });
+        
+        return button;
+    }
+
+    private void loadData() {
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                progressBar.setVisible(true);
+                List<SanPham> list = controller.getAllSanPham();
+                publish();
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                progressBar.setVisible(false);
+                List<SanPham> list = controller.getAllSanPham();
+                displayList(list);
+            }
+        }.execute();
+    }
+
+    private void loadCategories() {
+        loadCategories(cboDanhMuc);
+        loadCategories(cboDanhMucSearch);
+    }
+
+    private void loadCategories(JComboBox<String> comboBox) {
+        try (Connection conn = DatabaseUtil.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT id_danh_muc, ten_danh_muc FROM DanhMucSanPham WHERE trang_thai = 'Hoạt động'")) {
+            ResultSet rs = ps.executeQuery();
+            comboBox.removeAllItems();
+            if (comboBox == cboDanhMucSearch) comboBox.addItem("Tất cả");
+            else comboBox.addItem("Chọn danh mục");
+            while (rs.next()) {
+                comboBox.addItem(rs.getInt("id_danh_muc") + " - " + rs.getString("ten_danh_muc"));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Lỗi tải danh mục: " + e.getMessage());
+        }
+    }
+
+    // Sửa lại phương thức displayList để hiển thị đầy đủ thông tin
+    private void displayList(List<SanPham> list) {
+        tableModel.setRowCount(0);
+        for (SanPham sp : list) {
+            Object[] row = {
+                sp.getIdSanPham(),                                          // ID
+                sp.getTenSanPham(),                                         // Tên sản phẩm
+                sp.getTenDanhMuc() != null ? sp.getTenDanhMuc() : "N/A",    // Danh mục
+                formatCurrency(sp.getDonGia()),                             // Đơn giá
+                sp.getSoLuong(),                                            // Số lượng
+                sp.getThoiGianChuanBi(),                                     // Thời gian chuẩn bị
+                sp.isCoBanMangVe() ? "Có" : "Không",                        // Mang về
+                sp.isCoBanTaiQuan() ? "Có" : "Không",                       // Tại quán
+                sp.getTrangThai()                                           // Trạng thái
+            };
+            tableModel.addRow(row);
+        }
+    }
+    
+    private String formatCurrency(BigDecimal amount) {
+        if (amount == null) return "0 VNĐ";
+        return String.format("%,.0f VNĐ", amount.doubleValue());
+    }
+
+    // Sửa lại phương thức displaySelected để lấy đúng dữ liệu từ bảng
+    private void displaySelected(int row) {
+        // Lấy ID từ cột đầu tiên
+        Object idObj = tableModel.getValueAt(row, 0);
+        if (idObj != null) {
+            txtId.setText(idObj.toString());
+            
+            // Tìm sản phẩm theo ID để lấy đầy đủ thông tin
+            int id = Integer.parseInt(idObj.toString());
+            List<SanPham> allProducts = controller.getAllSanPham();
+            SanPham selectedProduct = null;
+            
+            for (SanPham sp : allProducts) {
+                if (sp.getIdSanPham() == id) {
+                    selectedProduct = sp;
+                    break;
+                }
+            }
+            
+            if (selectedProduct != null) {
+                txtTen.setText(selectedProduct.getTenSanPham());
+                txtDonGia.setText(selectedProduct.getDonGia().toString());
+                txtSoLuong.setText(String.valueOf(selectedProduct.getSoLuong()));
+                txtMoTa.setText(selectedProduct.getMoTa() != null ? selectedProduct.getMoTa() : "");
+                txtHinhAnh.setText(selectedProduct.getHinhAnh() != null ? selectedProduct.getHinhAnh() : "");
+                txtThoiGianChuanBi.setText(String.valueOf(selectedProduct.getThoiGianChuanBi()));
+                chkCoBanMangVe.setSelected(selectedProduct.isCoBanMangVe());
+                chkCoBanTaiQuan.setSelected(selectedProduct.isCoBanTaiQuan());
+                cboTrangThai.setSelectedItem(selectedProduct.getTrangThai());
+                
+                // Set danh mục
+                for (int i = 0; i < cboDanhMuc.getItemCount(); i++) {
+                    String item = cboDanhMuc.getItemAt(i);
+                    if (item.startsWith(selectedProduct.getIdDanhMuc() + " - ")) {
