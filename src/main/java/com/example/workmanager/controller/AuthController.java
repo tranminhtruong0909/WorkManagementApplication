@@ -39,6 +39,7 @@ public class AuthController {
     private final PermissionService permissionService;
     private final UserRoleRepository userRoleRepository;
 
+    @CrossOrigin
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
@@ -118,6 +119,18 @@ public class AuthController {
                 .map(user -> ResponseEntity.ok(new UserResponse(user)))
                 .orElse(ResponseEntity.notFound().build());
     }
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body("No authentication found");
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Đăng xuất thành công! Hãy xóa token ở phía client.");
+
+        return ResponseEntity.ok(response);
+    }
+
 
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal CustomUserDetails userDetails) {
@@ -198,6 +211,9 @@ public class AuthController {
                                 permission.put("boardId", ur.getBoard().getId());
                                 permission.put("boardName", ur.getBoard().getName());
                                 permission.put("role", ur.getRole().name());
+                                // ✅ Thêm thông tin user vào từng quyền
+                                permission.put("userName", ur.getUser().getName());
+                                permission.put("userEmail", ur.getUser().getEmail());
                                 return permission;
                             })
                             .collect(Collectors.toList());
@@ -219,6 +235,7 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
 
     // 🔍 API để xem user cụ thể và phân quyền (chỉ ADMIN mới xem được)
     @GetMapping("/user-permissions/{userId}")
