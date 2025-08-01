@@ -153,6 +153,7 @@ public class AuthController {
                 "userId", userDetails.getUser().getId(),
                 "email", userDetails.getUser().getEmail(),
                 "name", userDetails.getUser().getName()
+
         ));
     }
 
