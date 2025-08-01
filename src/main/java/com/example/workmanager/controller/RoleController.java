@@ -30,18 +30,38 @@ public class RoleController {
     private final PermissionService permissionService;
 
     // ✅ Lấy role của user trong 1 board
-    @GetMapping("/user/{userId}/board/{boardId}")
-    public ResponseEntity<?> getUserRoleInBoard(@PathVariable Integer userId,
-                                                @PathVariable Integer boardId,
-                                                @AuthenticationPrincipal CustomUserDetails userDetails) {
-        User user = userDetails.getUser();
-        // Chỉ ADMIN hoặc MANAGER board mới được xem role
-        if (!permissionService.canManageBoard(user.getId(), boardId)) {
+    @PostMapping("/user/{userId}/board/{boardId}")
+    public ResponseEntity<?> addUserToBoard(
+            @PathVariable Integer userId,
+            @PathVariable Integer boardId,
+            @RequestBody Map<String, Object> req,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        User currentUser = userDetails.getUser();
+        // Kiểm tra quyền admin/manager board
+        if (!permissionService.canManageBoard(currentUser.getId(), boardId)) {
             return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
         }
-        return userRoleRepository.findByUserIdAndBoardId(userId, boardId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            String roleStr = req.get("role").toString().toUpperCase();
+            Role role = Role.valueOf(roleStr);
+
+            User targetUser = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
+            Board board = boardRepository.findById(boardId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy board"));
+
+            Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
+            UserRole userRole = existing.orElseGet(UserRole::new);
+
+            userRole.setUser(targetUser);
+            userRole.setRole(role);
+            userRole.setBoard(board);
+
+            return ResponseEntity.ok(userRoleRepository.save(userRole));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
+        }
     }
 
     // ✅ Lấy danh sách tất cả user và vai trò trong 1 board
@@ -218,4 +238,29 @@ public class RoleController {
             return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
         }
     }
+    @DeleteMapping("/user/{userId}/board/{boardId}")
+    public ResponseEntity<?> removeUserFromBoard(@PathVariable Integer userId,
+                                                 @PathVariable Integer boardId,
+                                                 @AuthenticationPrincipal CustomUserDetails userDetails) {
+        User currentUser = userDetails.getUser();
+
+        // Chỉ ADMIN hoặc người có quyền quản lý board mới được xóa người khác
+        if (!permissionService.canManageBoard(currentUser.getId(), boardId)) {
+            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+        }
+
+        Optional<UserRole> userRoleOpt = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
+        if (userRoleOpt.isEmpty()) {
+            return ResponseEntity.status(404).body("User không có trong board này!");
+        }
+
+        userRoleRepository.delete(userRoleOpt.get());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã xóa user khỏi board thành công!",
+                "userId", userId,
+                "boardId", boardId
+        ));
+    }
+
 }
