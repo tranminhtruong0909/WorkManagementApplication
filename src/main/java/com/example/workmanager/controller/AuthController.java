@@ -154,10 +154,93 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         try {
+            System.out.println("DEBUG: Register attempt for email: " + request.getEmail());
+
+            // Validate input
+            if (request.getName() == null || request.getName().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Tên không được để trống",
+                        "errorCode", "EMPTY_NAME"
+                ));
+            }
+
+            if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Email không được để trống",
+                        "errorCode", "EMPTY_EMAIL"
+                ));
+            }
+
+            if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Mật khẩu không được để trống",
+                        "errorCode", "EMPTY_PASSWORD"
+                ));
+            }
+
+            if (request.getPassword().length() < 6) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Mật khẩu phải có ít nhất 6 ký tự",
+                        "errorCode", "PASSWORD_TOO_SHORT"
+                ));
+            }
+
+            // Validate email format (basic check)
+            if (!request.getEmail().matches("^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Email không hợp lệ",
+                        "errorCode", "INVALID_EMAIL_FORMAT"
+                ));
+            }
+
             User user = authService.register(request);
-            return ResponseEntity.ok(new UserResponse(user));
+            System.out.println("DEBUG: User registered successfully: " + user.getId() + " - " + user.getEmail());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("user", new UserResponse(user));
+            response.put("message", "Đăng ký thành công! Bạn có thể đăng nhập ngay bây giờ.");
+
+            return ResponseEntity.ok(response);
+
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+            System.out.println("DEBUG: Register error: " + e.getMessage());
+
+            String errorMessage = e.getMessage();
+            String errorCode = "REGISTER_FAILED";
+
+            // Phân loại lỗi cụ thể
+            if (errorMessage.contains("Email đã tồn tại")) {
+                errorCode = "EMAIL_ALREADY_EXISTS";
+            } else if (errorMessage.contains("Email không hợp lệ")) {
+                errorCode = "INVALID_EMAIL";
+            } else if (errorMessage.contains("Mật khẩu phải có ít nhất")) {
+                errorCode = "PASSWORD_TOO_SHORT";
+            } else if (errorMessage.contains("Tên không được để trống")) {
+                errorCode = "EMPTY_NAME";
+            }
+
+            return ResponseEntity.status(400).body(Map.of(
+                    "success", false,
+                    "message", errorMessage,
+                    "errorCode", errorCode,
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            System.out.println("DEBUG: Unexpected register error: " + e.getMessage());
+            e.printStackTrace();
+
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "message", "Có lỗi hệ thống xảy ra. Vui lòng thử lại sau",
+                    "errorCode", "SYSTEM_ERROR",
+                    "timestamp", System.currentTimeMillis()
+            ));
         }
     }
 
