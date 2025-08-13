@@ -45,7 +45,7 @@ public class SecurityConfig {
                         )
                 );
 
-        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class); // mọi request đều fai đi qua cái này
 
         return http.build();
     }

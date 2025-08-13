@@ -61,6 +61,8 @@ public class JwtFilter extends OncePerRequestFilter {
             logger.warn("DEBUG: No Authorization header or invalid format");
         }
 
+        // kiểm tra token có đúng với token được sinh ra không
+
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
             if (jwtUtil.isTokenValid(jwt, userDetails)) {
