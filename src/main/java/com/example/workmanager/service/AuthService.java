@@ -16,12 +16,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
 
     public User login(LoginRequest request) {
+        // Kiểm tra email có tồn tại không
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Email không tồn tại"));
+                .orElseThrow(() -> new RuntimeException("Thông tin tài khoản mật khẩu không chính xác!!"));
 
+        // Kiểm tra mật khẩu
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Mật khẩu không đúng");
+            throw new RuntimeException("Mật khẩu không chính xác");
         }
+
+
 
         return user;
     }

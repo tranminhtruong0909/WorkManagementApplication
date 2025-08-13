@@ -44,6 +44,24 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
             System.out.println("DEBUG: Login attempt for email: " + request.getEmail());
+
+            // Validate input
+            if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Email không được để trống",
+                        "errorCode", "EMPTY_EMAIL"
+                ));
+            }
+
+            if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Mật khẩu không được để trống",
+                        "errorCode", "EMPTY_PASSWORD"
+                ));
+            }
+
             User user = authService.login(request);
             System.out.println("DEBUG: User found: " + user.getId() + " - " + user.getEmail());
 
@@ -68,6 +86,7 @@ public class AuthController {
                     .collect(Collectors.toList());
 
             Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
             response.put("user", new UserResponse(user));
             response.put("token", token);
             response.put("isSystemAdmin", user.isSystemAdmin());
@@ -76,14 +95,14 @@ public class AuthController {
             response.put("message", "Đăng nhập thành công! Bạn có " + permissions.size() + " board.");
 
             // 🔍 In ra thông tin phân quyền trong console
-            System.out.println("🔐 USER PERMISSIONS:");
+            System.out.println("🔍 USER PERMISSIONS:");
             System.out.println("User ID: " + user.getId());
             System.out.println("User Email: " + user.getEmail());
             System.out.println("Is System Admin: " + permissionService.isAdmin(user.getId()));
             System.out.println("Total Boards: " + permissions.size());
 
             if (permissions.isEmpty()) {
-                System.out.println("⚠️  User chưa có quyền trên board nào!");
+                System.out.println("⚠️ User chưa có quyền trên board nào!");
             } else {
                 System.out.println("📋 Board Permissions:");
                 permissions.forEach(permission -> {
@@ -94,12 +113,41 @@ public class AuthController {
                             " | Can View: " + permission.get("canViewBoard"));
                 });
             }
-            System.out.println("🔐 END PERMISSIONS");
+            System.out.println("🔍 END PERMISSIONS");
 
             return ResponseEntity.ok(response);
+
         } catch (RuntimeException e) {
             System.out.println("DEBUG: Login error: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+
+            String errorMessage = e.getMessage();
+            String errorCode = "LOGIN_FAILED";
+
+            // Phân loại lỗi cụ thể
+            if (errorMessage.contains("Email không tồn tại")) {
+                errorCode = "EMAIL_NOT_FOUND";
+            } else if (errorMessage.contains("Mật khẩu không chính xác") || errorMessage.contains("Mật khẩu không đúng")) {
+                errorCode = "INVALID_PASSWORD";
+            } else if (errorMessage.contains("Tài khoản đã bị khóa")) {
+                errorCode = "ACCOUNT_LOCKED";
+            }
+
+            return ResponseEntity.status(400).body(Map.of(
+                    "success", false,
+                    "message", errorMessage,
+                    "errorCode", errorCode,
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            System.out.println("DEBUG: Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "message", "Có lỗi hệ thống xảy ra. Vui lòng thử lại sau",
+                    "errorCode", "SYSTEM_ERROR",
+                    "timestamp", System.currentTimeMillis()
+            ));
         }
     }
 
