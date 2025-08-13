@@ -1,12 +1,17 @@
 package com.example.workmanager.model;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 
+@Setter
+@Getter
 @Entity
 @Table(name = "userrole")
 public class UserRole {
 
+    // Getters & Setters
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -20,16 +25,4 @@ public class UserRole {
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    // Getters & Setters
-    public Integer getId() { return id; }
-    public void setId(Integer id) { this.id = id; }
-
-    public User getUser() { return user; }
-    public void setUser(User user) { this.user = user; }
-
-    public Board getBoard() { return board; }
-    public void setBoard(Board board) { this.board = board; }
-
-    public Role getRole() { return role; }
-    public void setRole(Role role) { this.role = role; }
 }

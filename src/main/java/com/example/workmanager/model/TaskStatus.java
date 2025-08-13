@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum TaskStatus {
-    TODO("TOD)"),
+    TODO("TODO)"),
     IN_PROGRESS("IN_PROGRESS"),
     DONE("DONE"),
     EXPIRED("EXPIRED"),

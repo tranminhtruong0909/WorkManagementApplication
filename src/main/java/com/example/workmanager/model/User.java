@@ -35,27 +35,12 @@ public class User implements UserDetails {
 
     private String avatarUrl;
 
+    // Manual getters and setters for role
     @Column(length = 20, columnDefinition = "VARCHAR(20) DEFAULT 'USER'")
     private String role = "USER"; // Default role
 
     @Column(name = "is_system_admin", nullable = false)
     private boolean isSystemAdmin = false;
-
-    // Manual getters and setters for role
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public boolean isSystemAdmin() {
-        return isSystemAdmin;
-    }
-    public void setSystemAdmin(boolean isSystemAdmin) {
-        this.isSystemAdmin = isSystemAdmin;
-    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
