@@ -149,8 +149,8 @@ public class TaskController {
             Task task = taskService.getTaskEntityById(id).orElse(null);
             if (task == null) return ResponseEntity.notFound().build();
             Integer boardId = task.getGroup().getBoard().getId();
-            if (!permissionService.canManageBoard(user.getId(), boardId)) {
-                return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+            if (!permissionService.canDeleteTask(user.getId(), boardId)) {
+                return ResponseEntity.status(403).body("Bạn không có quyền xóa task này!");
             }
             taskService.deleteTask(id);
             return ResponseEntity.ok("Đã xoá task có ID " + id);

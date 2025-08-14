@@ -55,4 +55,11 @@ public class PermissionService {
         Role role = getRoleOnBoard(userId, boardId);
         return role != null; // Có bất kỳ vai trò nào đều xem được
     }
+    public boolean canDeleteTask(Integer userId, Integer boardId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null && user.isSystemAdmin()) return true;
+        Role role = getRoleOnBoard(userId, boardId);
+        return role == Role.ADMIN;
+    }
+
 }
