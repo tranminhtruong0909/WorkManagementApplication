@@ -2,6 +2,8 @@ package com.example.workmanager.controller;
 
 import com.example.workmanager.dto.TaskRequest;
 import com.example.workmanager.dto.TaskResponse;
+import com.example.workmanager.dto.TaskSearchRequest;
+import com.example.workmanager.dto.TaskSearchResult;
 import com.example.workmanager.model.Task;
 import com.example.workmanager.model.TaskStatus;
 import com.example.workmanager.model.User;
@@ -16,6 +18,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.example.workmanager.model.Group;
 
 @RestController
@@ -76,18 +82,106 @@ public class TaskController {
         return ResponseEntity.ok(filtered);
     }
 
-    // ✅ Lấy task theo ID
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getTaskById(@PathVariable Integer id, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        User user = userDetails.getUser();
-        var taskOpt = taskService.getTaskEntityById(id);
-        if (taskOpt.isEmpty()) return ResponseEntity.notFound().build();
-        Task task = taskOpt.get();
-        Integer boardId = task.getGroup().getBoard().getId();
-        if (!permissionService.canViewBoard(user.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+    // Thay thế endpoint GET /{id} và các endpoint tìm kiếm khác bằng API thống nhất này
+
+    // ✅ API tìm kiếm thống nhất - thay thế cho GET /{id}
+    @GetMapping("/search")
+    public ResponseEntity<?> searchTasks(
+            // Tìm kiếm theo ID cụ thể
+            @RequestParam(required = false) Integer id,
+
+            // Tìm kiếm theo tên (partial match)
+            @RequestParam(required = false) String name,
+
+            // Tìm kiếm theo trạng thái
+            @RequestParam(required = false) String status,
+
+            // Tìm kiếm theo group
+            @RequestParam(required = false) Integer groupId,
+
+            // Tìm task đang hoạt động trong ngày cụ thể
+            @RequestParam(required = false) String activeOnDate,
+
+            // Tìm task trong khoảng thời gian
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+
+            // Tìm theo assignee
+            @RequestParam(required = false) Integer assigneeId,
+
+            // Sắp xếp kết quả
+            @RequestParam(required = false, defaultValue = "id") String sortBy,
+            @RequestParam(required = false, defaultValue = "asc") String sortDirection,
+
+            // Phân trang
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "15") int size,
+
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        try {
+            User user = userDetails.getUser();
+
+            // Nếu có ID, tìm kiếm theo ID (giống như endpoint cũ)
+            if (id != null) {
+                var taskOpt = taskService.getTaskEntityById(id);
+                if (taskOpt.isEmpty()) return ResponseEntity.notFound().build();
+                Task task = taskOpt.get();
+                Integer boardId = task.getGroup().getBoard().getId();
+                if (!permissionService.canViewBoard(user.getId(), boardId)) {
+                    return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+                }
+                return ResponseEntity.ok(List.of(new TaskResponse(task)));
+            }
+
+            // Tạo search request
+            TaskSearchRequest searchRequest = new TaskSearchRequest();
+            searchRequest.setName(name);
+            searchRequest.setStatus(status);
+            searchRequest.setGroupId(groupId);
+            searchRequest.setAssigneeId(assigneeId);
+
+            // Parse dates
+            if (activeOnDate != null && !activeOnDate.trim().isEmpty()) {
+                searchRequest.setSearchDate(LocalDate.parse(activeOnDate));
+            }
+            if (startDate != null && !startDate.trim().isEmpty()) {
+                searchRequest.setStartDate(LocalDate.parse(startDate));
+            }
+            if (endDate != null && !endDate.trim().isEmpty()) {
+                searchRequest.setEndDate(LocalDate.parse(endDate));
+            }
+
+            // Set sort và pagination
+            searchRequest.setSortBy(sortBy);
+            searchRequest.setSortDirection(sortDirection);
+            searchRequest.setPage(page);
+            searchRequest.setSize(size);
+
+            // Thực hiện tìm kiếm
+            List<TaskResponse> results = taskService.searchTasksUnified(searchRequest, user);
+
+            // Lấy thông tin phân trang từ database
+            long totalElements = taskService.countTasksUnified(searchRequest, user);
+            int totalPages = (int) Math.ceil((double) totalElements / size);
+
+            // Trả về kết quả với thông tin phân trang chính xác
+            Map<String, Object> response = new HashMap<>();
+            response.put("tasks", results);
+            response.put("page", page);
+            response.put("size", size);
+            response.put("totalElements", totalElements);           // Tổng số record trong DB
+            response.put("totalPages", totalPages);                 // Tổng số trang
+            response.put("currentSize", results.size());            // Số lượng trong page hiện tại
+            response.put("hasMore", page < totalPages - 1);         // Còn trang tiếp theo không
+            response.put("isFirst", page == 0);                     // Trang đầu tiên?
+            response.put("isLast", page >= totalPages - 1);         // Trang cuối cùng?
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Lỗi tìm kiếm: " + e.getMessage());
         }
-        return ResponseEntity.ok(new TaskResponse(task));
     }
 
     // ✅ Cập nhật toàn bộ task (PUT) - có kiểm tra quyền
