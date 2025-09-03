@@ -5,9 +5,13 @@ import lombok.Getter;
 
 @Getter
 public class GroupResponse {
+    @Getter
     private Integer id;
+    @Getter
     private String name;
+    @Getter
     private Integer boardId;
+    @Getter
     private String boardName;
 
     public GroupResponse(Integer id, String name, Integer boardId, String boardName) {
@@ -16,7 +20,6 @@ public class GroupResponse {
         this.boardId = boardId;
         this.boardName = boardName;
     }
-
     public GroupResponse(Group group) {
         this(
                 group.getId(),
@@ -26,20 +29,4 @@ public class GroupResponse {
         );
     }
 
-    // Getters
-    public Integer getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public Integer getBoardId() {
-        return boardId;
-    }
-
-    public String getBoardName() {
-        return boardName;
-    }
 }

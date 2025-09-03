@@ -3,6 +3,7 @@ package com.example.workmanager.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class TaskRequest {
@@ -18,4 +19,7 @@ public class TaskRequest {
     private String timelineStart;
     private String timelineEnd;
     private String notes;
+
+    // ✅ THÊM FIELD CHO MULTIPLE ASSIGNEES
+    private List<Integer> assigneeIds;
 }

@@ -1,5 +1,6 @@
 package com.example.workmanager.dto;
 
+import com.example.workmanager.dto.response.TaskResponse;
 import lombok.Data;
 import java.util.List;
 

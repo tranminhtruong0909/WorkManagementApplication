@@ -1,10 +1,14 @@
 package com.example.workmanager.dto;
 
 import com.example.workmanager.model.Board;
+import lombok.Data;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Data
 public class BoardResponse {
+    // Getters
     private Integer id;
     private String name;
     private String description;
@@ -18,10 +22,4 @@ public class BoardResponse {
                 ? board.getGroups().stream().map(GroupResponse::new).collect(Collectors.toList())
                 : null;
     }
-
-    // Getters
-    public Integer getId() { return id; }
-    public String getName() { return name; }
-    public String getDescription() { return description; }
-    public List<GroupResponse> getGroups() { return groups; }
 }
