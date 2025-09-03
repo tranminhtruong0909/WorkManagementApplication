@@ -1,55 +1,38 @@
-package com.example.workmanager.dto;
+package com.example.workmanager.dto.response;
 
 import com.example.workmanager.model.Task;
 import com.example.workmanager.model.User;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Data
 public class TaskResponse {
 
-    @Setter
-    @Getter
     private Integer id;
 
-    @Setter
-    @Getter
     private String name;
 
-    @Setter
-    @Getter
     private Integer groupId;
 
-    @Setter
-    @Getter
     private String groupName;
 
-    @Setter
-    @Getter
     private String status;
 
-    @Setter
-    @Getter
     private LocalDate dueDate;
 
-    @Setter
-    @Getter
     private LocalDate timelineStart;
-    @Setter
-    @Getter
+
     private LocalDate timelineEnd;
 
-    @Setter
-    @Getter
     private String notes;
-    // GETTERS cho các field mới
-    @Getter
-    private List<Integer> assigneeIds; // ✅ THÊM FIELD MỚI
-    @Getter
-    private List<String> assigneeNames; // ✅ THÊM FIELD MỚI
+
+    private List<Integer> assigneeIds;
+
+    private List<String> assigneeNames;
 
     public TaskResponse(Task task) {
         this.id = task.getId();
@@ -62,7 +45,6 @@ public class TaskResponse {
         this.timelineEnd = task.getTimelineEnd();
         this.notes = task.getNotes();
 
-        // ✅ THÊM: Lấy thông tin assignees
         if (task.getAssignees() != null) {
             this.assigneeIds = task.getAssignees().stream()
                     .map(User::getId)

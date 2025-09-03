@@ -1,4 +1,4 @@
-package com.example.workmanager.dto;
+package com.example.workmanager.dto.response;
 
 import com.example.workmanager.model.Board;
 import lombok.Data;
@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 
 @Data
 public class BoardResponse {
-    // Getters
+
     private Integer id;
     private String name;
     private String description;

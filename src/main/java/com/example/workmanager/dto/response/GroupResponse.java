@@ -1,17 +1,18 @@
-package com.example.workmanager.dto;
+package com.example.workmanager.dto.response;
 
 import com.example.workmanager.model.Group;
+import lombok.Data;
 import lombok.Getter;
 
-@Getter
+@Data
 public class GroupResponse {
-    @Getter
+
     private Integer id;
-    @Getter
+
     private String name;
-    @Getter
+
     private Integer boardId;
-    @Getter
+
     private String boardName;
 
     public GroupResponse(Integer id, String name, Integer boardId, String boardName) {

@@ -1,7 +1,9 @@
-package com.example.workmanager.dto;
+package com.example.workmanager.dto.response;
 
 import com.example.workmanager.model.User;
+import lombok.Data;
 
+@Data
 public class UserResponse {
     private String name;
     private String email;
@@ -13,15 +15,4 @@ public class UserResponse {
         this.avatarUrl = user.getAvatarUrl();
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
 }

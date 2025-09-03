@@ -1,4 +1,4 @@
-package com.example.workmanager.dto;
+package com.example.workmanager.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
