@@ -6,16 +6,25 @@ import com.example.workmanager.dto.request.RegisterRequest;
 import com.example.workmanager.dto.request.UpdateProfileRequest;
 import com.example.workmanager.dto.response.UserResponse;
 import com.example.workmanager.model.CustomUserDetails;
+import com.example.workmanager.model.User;
 import com.example.workmanager.service.AuthService;
 import com.example.workmanager.config.JwtUtil;
 import com.example.workmanager.service.CookieService;
 import com.example.workmanager.service.CustomUserDetailsService;
 import com.example.workmanager.util.PermissionValidator;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,16 +44,43 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest,
-                                   HttpServletResponse httpServletResponse) {
-        Map<String, Object> response = authService.login(loginRequest);
+                                   HttpServletResponse response) {
+        Map<String, Object> result = authService.login(loginRequest);
 
-        UserResponse userResponse = (UserResponse) response.get("user");
+        UserResponse userResponse = (UserResponse) result.get("user");
         UserDetails userDetails = customUserDetailsService.loadUserByUsername(userResponse.getEmail());
 
-        String token = jwtUtil.generateToken(userDetails);
-        cookieService.setAuthCookie(httpServletResponse, token);
+        String accessToken = jwtUtil.generateAccessToken(userDetails);
+        String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
-        return ResponseEntity.ok(response);
+        cookieService.setAuthCookie(response, accessToken);
+        cookieService.setRefreshCookie(response, refreshToken);
+
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(HttpServletRequest request,
+                                          HttpServletResponse response) {
+        String refreshToken = cookieService.getCookieValue(request, "refresh_token");
+        if (refreshToken == null) {
+            return ResponseEntity.status(401).body("Refresh token is missing!");
+        }
+
+        try {
+            String username = jwtUtil.extractUsername(refreshToken);
+            UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
+
+            if (jwtUtil.isRefreshTokenValid(refreshToken, userDetails)) {
+                String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+                cookieService.setAuthCookie(response, newAccessToken);
+                return ResponseEntity.ok("Access token refreshed successfully!");
+            } else {
+                return ResponseEntity.status(401).body("Invalid refresh token!");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("Error refreshing token: " + e.getMessage());
+        }
     }
 
     @PostMapping("/register")
@@ -54,18 +90,17 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletResponse httpServletResponse) {
-        cookieService.clearAuthCookie(httpServletResponse);
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Đăng xuất thành công! Cookie đã được xóa!"
-        ));
+    public ResponseEntity<?> logout(HttpServletResponse response) {
+        cookieService.clearAuthCookie(response);
+        cookieService.clearRefreshCookie(response);
+        return ResponseEntity.ok("Logged out successfully!");
     }
-
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal CustomUserDetails userDetails) {
         permissionValidator.validateUserAuthentication(userDetails);
-        return ResponseEntity.ok(authService.getUserResponse(userDetails.getUser()));
+        User user = userDetails.getUser();
+
+        return ResponseEntity.ok(new UserResponse(user));
     }
 
     @PutMapping("/me")
