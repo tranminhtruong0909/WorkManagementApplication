@@ -1,5 +1,6 @@
 package com.example.workmanager.config;
 
+import com.example.workmanager.service.CookieService;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,17 +27,20 @@ public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
     private static final Logger logger = LoggerFactory.getLogger(JwtFilter.class);
+    private final CookieService cookieService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
             throws ServletException, IOException {
 
 //        final String authHeader = request.getHeader("Authorization");
 //        logger.info("DEBUG: Request URI: {}", request.getRequestURI());
 //        logger.info("DEBUG: Authorization header: {}", authHeader);
 
+        String jwt = cookieService.getCookieValue(request, "access_token");
         String username = null;
-        String jwt = null;
 
 //        if (authHeader != null && authHeader.startsWith("Bearer ")) {
 //            jwt = authHeader.substring(7);
@@ -60,43 +64,39 @@ public class JwtFilter extends OncePerRequestFilter {
 //            logger.warn("DEBUG: No Authorization header or invalid format");
 //        }
 
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if ("access_token".equals(cookie.getName())) {
-                    jwt = cookie.getValue();
-                    logger.info("DEBUG: JWT Token extracted from cookies: {}", jwt.substring(0, Math.min(jwt.length(), 20)) + "....");
-                    break;
-                }
-            }
-        }
-
-        if  (jwt == null) {
-            final String Authorization = request.getHeader("Authorization");
-            if (Authorization != null && Authorization.startsWith("Bearer ")) {
-                jwt = Authorization.substring(7);
-                logger.info("DEBUG: JWT Token extracted from Authorization: {}", jwt.substring(0, Math.min(jwt.length(), 20)) + "....");
-            }
-        }
-
         if (jwt != null) {
-            if( jwt.split("\\.").length -1  != 2 ) {
-                logger.info("DEBUG: JWT Token extracted from JWT: {}", jwt);
-                filterChain.doFilter(request, response);
-                return;
-            }
-            try{
+            try {
                 username = jwtUtil.extractUsername(jwt);
-                logger.info("DEBUG: Username extracted from JWT: {}", username);
+            } catch (ExpiredJwtException e) {
+                logger.warn("Access token expired. Trying refresh...");
+
+                // Nếu access token hết hạn → thử lấy refresh token
+                String refreshToken = cookieService.getCookieValue(request, "refresh_token");
+                if (refreshToken != null) {
+                    try {
+                        String refreshUsername = jwtUtil.extractUsername(refreshToken);
+
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(refreshUsername);
+
+                        if (jwtUtil.isTokenValid(refreshToken, userDetails)) {
+                            // Sinh access token mới
+                            String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+                            cookieService.setAuthCookie(response, newAccessToken);
+
+                            username = refreshUsername;
+                            jwt = newAccessToken;
+
+                            logger.info("Issued new access token for user: {}", refreshUsername);
+                        } else {
+                            logger.warn("Invalid refresh token for user: {}", refreshUsername);
+                        }
+                    } catch (Exception ex) {
+                        logger.error("Error while refreshing token", ex);
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Error parsing access token", e);
             }
-            catch(ExpiredJwtException e){
-                logger.warn("JWT expired {}", jwt);
-            }
-            catch(Exception e){
-                logger.error("Error parsing JWT: {}", jwt, e);
-            }
-        }else {
-            logger.warn("DEBUG: No JWT token found in cookie or Authorization header!");
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -107,11 +107,7 @@ public class JwtFilter extends OncePerRequestFilter {
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
                 logger.info("DEBUG: Authentication set for user: {}", username);
-            } else {
-                logger.warn("DEBUG: JWT token is not valid for user: {}", username);
             }
-        } else {
-            logger.info("DEBUG: Username is null or authentication already exists");
         }
 
         filterChain.doFilter(request, response);
