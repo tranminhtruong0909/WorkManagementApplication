@@ -1,10 +1,12 @@
 package com.example.workmanager.config;
 
+import com.example.workmanager.exceptions.JwtTokenException; // THÊM IMPORT NÀY
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -23,10 +25,10 @@ public class JwtUtil {
     private static final long ACCESS_TOKEN_EXPIRATION = 1000 * 60 * 5;        // 5 phút
     private static final long REFRESH_TOKEN_EXPIRATION = 1000 * 60 * 60 * 24 * 7; // 7 ngày
 
-    // Lấy username từ token
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
+    // Lấy username từ token - XÓA PHƯƠNG THỨC NÀY VÌ BỊ TRÙNG
+    // public String extractUsername(String token) {
+    //     return extractClaim(token, Claims::getSubject);
+    // }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
@@ -70,10 +72,6 @@ public class JwtUtil {
         return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
     }
 
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
     private Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
@@ -91,8 +89,30 @@ public class JwtUtil {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
         return Keys.hmacShaKeyFor(keyBytes);
     }
+
     public boolean isRefreshTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+    }
+
+    public boolean isTokenExpired(String token) {
+        try {
+            return extractExpiration(token).before(new Date());
+        } catch (Exception e) {
+            throw new JwtTokenException("Invalid token format",
+                    HttpStatus.UNAUTHORIZED,
+                    "INVALID_TOKEN_FORMAT");
+        }
+    }
+
+    // GIỮ LẠI PHƯƠNG THỨC EXTRACTUSERNAME CÓ XỬ LÝ EXCEPTION
+    public String extractUsername(String token) {
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (Exception e) {
+            throw new JwtTokenException("Invalid token: " + e.getMessage(),
+                    HttpStatus.UNAUTHORIZED,
+                    "INVALID_TOKEN");
+        }
     }
 }

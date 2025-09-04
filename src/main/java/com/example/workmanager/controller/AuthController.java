@@ -5,6 +5,7 @@ import com.example.workmanager.dto.request.LoginRequest;
 import com.example.workmanager.dto.request.RegisterRequest;
 import com.example.workmanager.dto.request.UpdateProfileRequest;
 import com.example.workmanager.dto.response.UserResponse;
+import com.example.workmanager.exceptions.TokenRefreshException;
 import com.example.workmanager.model.CustomUserDetails;
 import com.example.workmanager.model.User;
 import com.example.workmanager.service.AuthService;
@@ -63,24 +64,26 @@ public class AuthController {
     public ResponseEntity<?> refreshToken(HttpServletRequest request,
                                           HttpServletResponse response) {
         String refreshToken = cookieService.getCookieValue(request, "refresh_token");
+
         if (refreshToken == null) {
-            return ResponseEntity.status(401).body("Refresh token is missing!");
+            throw new TokenRefreshException("Refresh token is missing",
+                    HttpStatus.UNAUTHORIZED,
+                    "REFRESH_TOKEN_MISSING");
         }
 
-        try {
-            String username = jwtUtil.extractUsername(refreshToken);
-            UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
+        String username = jwtUtil.extractUsername(refreshToken);
+        UserDetails userDetails = customUserDetailsService.loadUserByUsername(username);
 
-            if (jwtUtil.isRefreshTokenValid(refreshToken, userDetails)) {
-                String newAccessToken = jwtUtil.generateAccessToken(userDetails);
-                cookieService.setAuthCookie(response, newAccessToken);
-                return ResponseEntity.ok("Access token refreshed successfully!");
-            } else {
-                return ResponseEntity.status(401).body("Invalid refresh token!");
-            }
-        } catch (Exception e) {
-            return ResponseEntity.status(401).body("Error refreshing token: " + e.getMessage());
+        if (!jwtUtil.isRefreshTokenValid(refreshToken, userDetails)) {
+            throw new TokenRefreshException("Invalid refresh token",
+                    HttpStatus.UNAUTHORIZED,
+                    "INVALID_REFRESH_TOKEN");
         }
+
+        String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+        cookieService.setAuthCookie(response, newAccessToken);
+
+        return ResponseEntity.ok("Access token refreshed successfully!");
     }
 
     @PostMapping("/register")

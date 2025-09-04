@@ -1,5 +1,6 @@
 package com.example.workmanager.config;
 
+import com.example.workmanager.exceptions.TokenRefreshException;
 import com.example.workmanager.service.CookieService;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
@@ -10,6 +11,7 @@ import jakarta.servlet.http.Cookie;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -65,38 +67,14 @@ public class JwtFilter extends OncePerRequestFilter {
 //        }
 
         if (jwt != null) {
-            try {
-                username = jwtUtil.extractUsername(jwt);
-            } catch (ExpiredJwtException e) {
-                logger.warn("Access token expired. Trying refresh...");
-
-                // Nếu access token hết hạn → thử lấy refresh token
-                String refreshToken = cookieService.getCookieValue(request, "refresh_token");
-                if (refreshToken != null) {
-                    try {
-                        String refreshUsername = jwtUtil.extractUsername(refreshToken);
-
-                        UserDetails userDetails = userDetailsService.loadUserByUsername(refreshUsername);
-
-                        if (jwtUtil.isTokenValid(refreshToken, userDetails)) {
-                            // Sinh access token mới
-                            String newAccessToken = jwtUtil.generateAccessToken(userDetails);
-                            cookieService.setAuthCookie(response, newAccessToken);
-
-                            username = refreshUsername;
-                            jwt = newAccessToken;
-
-                            logger.info("Issued new access token for user: {}", refreshUsername);
-                        } else {
-                            logger.warn("Invalid refresh token for user: {}", refreshUsername);
-                        }
-                    } catch (Exception ex) {
-                        logger.error("Error while refreshing token", ex);
-                    }
-                }
-            } catch (Exception e) {
-                logger.error("Error parsing access token", e);
+            // Xử lý token hết hạn hoặc lỗi mà không dùng try-catch
+            if (jwtUtil.isTokenExpired(jwt)) {
+                handleExpiredToken(request, response);
+                jwt = cookieService.getCookieValue(request, "access_token"); // Lấy token mới nếu có
             }
+
+            // Extract username sau khi xử lý refresh (nếu cần)
+            username = jwtUtil.extractUsername(jwt);
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -106,10 +84,35 @@ public class JwtFilter extends OncePerRequestFilter {
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
-                logger.info("DEBUG: Authentication set for user: {}", username);
+                logger.info("Authentication set for user: {}", username);
             }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void handleExpiredToken(HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = cookieService.getCookieValue(request, "refresh_token");
+
+        if (refreshToken == null) {
+            throw new TokenRefreshException("Refresh token is missing",
+                    HttpStatus.UNAUTHORIZED,
+                    "REFRESH_TOKEN_MISSING");
+        }
+
+        String refreshUsername = jwtUtil.extractUsername(refreshToken);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(refreshUsername);
+
+        if (!jwtUtil.isTokenValid(refreshToken, userDetails)) {
+            throw new TokenRefreshException("Invalid refresh token",
+                    HttpStatus.UNAUTHORIZED,
+                    "INVALID_REFRESH_TOKEN");
+        }
+
+        // Sinh access token mới
+        String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+        cookieService.setAuthCookie(response, newAccessToken);
+
+        logger.info("Issued new access token for user: {}", refreshUsername);
     }
 }
