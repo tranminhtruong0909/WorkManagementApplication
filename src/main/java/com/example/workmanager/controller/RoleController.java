@@ -8,7 +8,12 @@ import com.example.workmanager.repository.BoardRepository;
 import com.example.workmanager.repository.UserRepository;
 import com.example.workmanager.repository.UserRoleRepository;
 import com.example.workmanager.model.CustomUserDetails;
-import com.example.workmanager.service.PermissionService;
+import com.example.workmanager.service.PermissionFacade;
+import com.example.workmanager.exceptions.PermissionDeniedException;
+import com.example.workmanager.exceptions.ResourceNotFoundException;
+import com.example.workmanager.exceptions.BusinessLogicException;
+import com.example.workmanager.util.PermissionValidator;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -27,77 +32,100 @@ public class RoleController {
     private final UserRoleRepository userRoleRepository;
     private final UserRepository userRepository;
     private final BoardRepository boardRepository;
-    private final PermissionService permissionService;
+    private final PermissionFacade permissionFacade;
+    private final PermissionValidator permissionValidator;
 
-    // ✅ Lấy role của user trong 1 board
     @PostMapping("/user/{userId}/board/{boardId}")
-    public ResponseEntity<?> addUserToBoard(
-            @PathVariable Integer userId,
-            @PathVariable Integer boardId,
-            @RequestBody Map<String, Object> req,
-            @AuthenticationPrincipal CustomUserDetails userDetails
-    ) {
+    public ResponseEntity<?> addUserToBoard(@PathVariable Integer userId, @PathVariable Integer boardId,
+                                            @RequestBody Map<String, String> req,
+                                            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        permissionValidator.validateUserAuthentication(userDetails);
+
         User currentUser = userDetails.getUser();
-        // Kiểm tra quyền admin/manager board
-        if (!permissionService.canManageBoard(currentUser.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-        }
+        permissionValidator.validateBoardUserManagePermissions(currentUser.getId(), boardId);
+
+        String roleStr = req.get("role").toString().toUpperCase();
+        Role role;
         try {
-            String roleStr = req.get("role").toString().toUpperCase();
-            Role role = Role.valueOf(roleStr);
-
-            User targetUser = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
-            Board board = boardRepository.findById(boardId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy board"));
-
-            Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
-            UserRole userRole = existing.orElseGet(UserRole::new);
-
-            userRole.setUser(targetUser);
-            userRole.setRole(role);
-            userRole.setBoard(board);
-
-            return ResponseEntity.ok(userRoleRepository.save(userRole));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
+            role = Role.valueOf(roleStr);
         }
+        catch (IllegalArgumentException e) {
+            throw new BusinessLogicException("Vai trò không hợp lệ: "+ roleStr, "INVALID_ROLE");
+        }
+
+        User targetUser = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy user"));
+        Board board = boardRepository.findById(boardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy board"));
+
+        Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
+        UserRole userRole = existing.orElseGet(UserRole::new);
+
+        userRole.setUser(targetUser);
+        userRole.setRole(role);
+        userRole.setBoard(board);
+
+        return ResponseEntity.ok(userRoleRepository.save(userRole));
+
     }
 
-    // ✅ Lấy danh sách tất cả user và vai trò trong 1 board
     @GetMapping("/board/{boardId}")
-    public ResponseEntity<?> getAllUsersInBoard(@PathVariable Integer boardId,
-                                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> getBoard(@PathVariable Integer boardId,
+                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
         User user = userDetails.getUser();
-        if (!permissionService.canManageBoard(user.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-        }
+        permissionValidator.validateBoardUserManagePermissions(user.getId(), boardId);
+
         List<UserRole> roles = userRoleRepository.findAllByBoardId(boardId);
         return ResponseEntity.ok(roles);
     }
 
-    // ✅ Lấy tất cả board mà user tham gia
     @GetMapping("/user/{userId}")
-    public ResponseEntity<?> getAllBoardsOfUser(@PathVariable Integer userId,
+    public ResponseEntity<List<UserRole>> getAllBroadsOfUser(@PathVariable Integer userId,
                                                              @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
         User user = userDetails.getUser();
-        // Chỉ ADMIN mới được xem tất cả board của user khác
-        if (!permissionService.isAdmin(user.getId()) && !user.getId().equals(userId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+        if ( !user.isSystemAdmin() && !user.getId().equals(userId)){
+            throw new PermissionDeniedException("Bạn không có quyền xem thông tin này!", "VIEW_USER_PERMISSION");
         }
-        List<UserRole> roles = userRoleRepository.findAllByUserId(userId);
+
+        List<UserRole> roles = userRoleRepository.findAllByUserId(user.getId());
         return ResponseEntity.ok(roles);
     }
 
-    // ✅ Dùng để gán nhanh 1 role cho user (chỉ để test, không kiểm tra quyền)
+    @DeleteMapping("/user/{userId}/board/{boardId}")
+    public ResponseEntity<?> removeUserFromBoard(@PathVariable Integer userId,
+                                                 @PathVariable Integer boardId,
+                                                 @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
+        User currentUser = userDetails.getUser();
+        permissionValidator.validateBoardUserManagePermissions(currentUser.getId(), boardId);
+
+        UserRole userRole = userRoleRepository.findByUserIdAndBoardId(userId, boardId)
+                .orElseThrow(() -> new ResourceNotFoundException("User không có trong board này !"));
+
+        userRoleRepository.delete(userRole);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã xóa thành công user khỏi board này thaành công !",
+                "userId", userId,
+                "boardId", boardId));
+    }
+
     @PostMapping("/seed")
     public ResponseEntity<?> seedUserRole(@RequestBody Map<String, Object> req,
                                           @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
         User user = userDetails.getUser();
         Integer boardId = Integer.valueOf(req.get("boardId").toString());
-        if (!permissionService.canManageBoard(user.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-        }
+
+        permissionValidator.validateBoardUserManagePermissions(user.getId(), boardId);
+
         try {
             Integer userId = Integer.valueOf(req.get("userId").toString());
             String roleStr = req.get("role").toString().toUpperCase();
@@ -110,7 +138,6 @@ public class RoleController {
             Board board = boardRepository.findById(boardId)
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy board"));
 
-            // Nếu đã tồn tại thì cập nhật, không tạo mới
             Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
             UserRole userRole = existing.orElseGet(UserRole::new);
 
@@ -120,147 +147,102 @@ public class RoleController {
 
             return ResponseEntity.ok(userRoleRepository.save(userRole));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
+            throw new BusinessLogicException("Lỗi phân quyền: " + e.getMessage(), "ROLE_ASSIGNMENT_ERROR");
         }
     }
 
-    // 🔧 API để test gán quyền ADMIN cho user (không kiểm tra permission - chỉ để test)
-    @PostMapping("/test-make-admin")
-    public ResponseEntity<?> makeUserAdmin(@RequestBody Map<String, Object> req,
-                                           @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            // Lấy thông tin từ request
-            Integer targetUserId = Integer.valueOf(req.get("userId").toString());
-            Integer boardId = Integer.valueOf(req.get("boardId").toString());
+    @PostMapping("/test-make-manager")
+    public ResponseEntity<?> makeUserManager(@RequestBody Map<String, Object> req,
+                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
 
-            // Tìm user và board
-            User targetUser = userRepository.findById(targetUserId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user với ID: " + targetUserId));
-
-            Board board = boardRepository.findById(boardId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy board với ID: " + boardId));
-
-            // Kiểm tra xem đã có UserRole cho user này trên board này chưa
-            Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(targetUserId, boardId);
-            UserRole userRole;
-
-            if (existing.isPresent()) {
-                // Cập nhật role hiện tại thành ADMIN
-                userRole = existing.get();
-                userRole.setRole(Role.ADMIN);
-                System.out.println("🔧 Updating existing role to ADMIN for user " + targetUserId + " on board " + boardId);
-            } else {
-                // Tạo mới UserRole với quyền ADMIN
-                userRole = new UserRole();
-                userRole.setUser(targetUser);
-                userRole.setBoard(board);
-                userRole.setRole(Role.ADMIN);
-                System.out.println("🔧 Creating new ADMIN role for user " + targetUserId + " on board " + boardId);
-            }
-
-            UserRole savedUserRole = userRoleRepository.save(userRole);
-
-            System.out.println("✅ Successfully assigned ADMIN role to user " + targetUser.getEmail() +
-                    " on board " + board.getName());
-
-            return ResponseEntity.ok(Map.of(
-                    "message", "Đã gán quyền ADMIN thành công!",
-                    "userEmail", targetUser.getEmail(),
-                    "boardName", board.getName(),
-                    "role", "ADMIN",
-                    "userRole", savedUserRole
-            ));
-
-        } catch (Exception e) {
-            System.out.println("❌ Error making user admin: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
-        }
-    }
-
-    // 🔧 API để tạo board và gán quyền ADMIN cho user (test purpose)
-    @PostMapping("/test-create-board-and-admin")
-    public ResponseEntity<?> createBoardAndMakeAdmin(@RequestBody Map<String, Object> req,
-                                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            Integer targetUserId = Integer.valueOf(req.get("userId").toString());
-            String boardName = req.get("boardName").toString();
-
-            // Tìm user
-            User targetUser = userRepository.findById(targetUserId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user với ID: " + targetUserId));
-
-            // Tạo board mới
-            Board newBoard = new Board();
-            newBoard.setName(boardName);
-            newBoard.setDescription("Board được tạo tự động để test");
-            Board savedBoard = boardRepository.save(newBoard);
-
-            // Gán quyền ADMIN cho user trên board mới
-            UserRole userRole = new UserRole();
-            userRole.setUser(targetUser);
-            userRole.setBoard(savedBoard);
-            userRole.setRole(Role.ADMIN);
-            UserRole savedUserRole = userRoleRepository.save(userRole);
-
-            System.out.println("✅ Created board '" + boardName + "' and assigned ADMIN role to user " + targetUser.getEmail());
-
-            return ResponseEntity.ok(Map.of(
-                    "message", "Đã tạo board và gán quyền ADMIN thành công!",
-                    "userEmail", targetUser.getEmail(),
-                    "boardName", boardName,
-                    "boardId", savedBoard.getId(),
-                    "role", "ADMIN",
-                    "userRole", savedUserRole
-            ));
-
-        } catch (Exception e) {
-            System.out.println("❌ Error creating board and making admin: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
-        }
-    }
-
-    // 🔧 API để gán user thành system admin (chỉ dùng cho dev/test)
-    @PostMapping("/test-make-system-admin")
-    public ResponseEntity<?> makeSystemAdmin(@RequestBody Map<String, Object> req) {
-        try {
-            Integer userId = Integer.valueOf(req.get("userId").toString());
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user với ID: " + userId));
-            user.setSystemAdmin(true);
-            userRepository.save(user);
-            return ResponseEntity.ok(Map.of(
-                    "message", "Đã gán quyền SYSTEM ADMIN cho user!",
-                    "userId", user.getId(),
-                    "userEmail", user.getEmail(),
-                    "isSystemAdmin", user.isSystemAdmin()
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
-        }
-    }
-    @DeleteMapping("/user/{userId}/board/{boardId}")
-    public ResponseEntity<?> removeUserFromBoard(@PathVariable Integer userId,
-                                                 @PathVariable Integer boardId,
-                                                 @AuthenticationPrincipal CustomUserDetails userDetails) {
         User currentUser = userDetails.getUser();
+        Integer targetUserId = Integer.valueOf(req.get("UserId").toString());
+        Integer boardId = Integer.valueOf(req.get("BoardId").toString());
 
-        // Chỉ ADMIN hoặc người có quyền quản lý board mới được xóa người khác
-        if (!permissionService.canManageBoard(currentUser.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+        permissionValidator.validateBoardUserManagePermissions(currentUser.getId(), boardId);
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy User với ID: "+ targetUserId));
+        Board board = boardRepository.findById(boardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy board với ID: " + boardId));
+
+        Optional<UserRole> existing = userRoleRepository.findByUserIdAndBoardId(currentUser.getId(), boardId);
+        UserRole userRole;
+
+        if(existing.isPresent()){
+            userRole = existing.get();
+            userRole.setRole(Role.MANAGER);
+        }else {
+            userRole = new UserRole();
+            userRole.setUser(targetUser);
+            userRole.setBoard(board);
+            userRole.setRole(Role.MANAGER);
         }
 
-        Optional<UserRole> userRoleOpt = userRoleRepository.findByUserIdAndBoardId(userId, boardId);
-        if (userRoleOpt.isEmpty()) {
-            return ResponseEntity.status(404).body("User không có trong board này!");
-        }
-
-        userRoleRepository.delete(userRoleOpt.get());
+        UserRole saveUserRole = userRoleRepository.save(userRole);
 
         return ResponseEntity.ok(Map.of(
-                "message", "Đã xóa user khỏi board thành công!",
-                "userId", userId,
-                "boardId", boardId
+                "message", "Đã gán quyền manager thành công!",
+                "userEmail", targetUser.getEmail(),
+                "boardName",  board.getName(),
+                "Role", "MANAGER",
+                "userRole", saveUserRole
         ));
     }
 
+    @PostMapping("/test-create-board-and-manager")
+    public ResponseEntity<?> createBoardAndMakeManager(@RequestBody Map<String, Object> req,
+                                                       @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+        permissionValidator.validateSystemAdminPermissions(userDetails.getUser().isSystemAdmin());
+
+        Integer targetUserId = Integer.valueOf(req.get("userId").toString());
+        String boardName = req.get("boardName").toString();
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy user với ID: " + targetUserId));
+
+        Board newBoard = new Board();
+        newBoard.setName(boardName);
+        newBoard.setDescription("Board được tạo tự động để test");
+        Board savedBoard = boardRepository.save(newBoard);
+
+        UserRole userRole = new UserRole();
+        userRole.setUser(targetUser);
+        userRole.setBoard(savedBoard);
+        userRole.setRole(Role.MANAGER);
+        UserRole savedUserRole = userRoleRepository.save(userRole);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã tạo board và gán quyền MANAGER thành công!",
+                "userEmail", targetUser.getEmail(),
+                "boardName", boardName,
+                "boardId", savedBoard.getId(),
+                "role", "MANAGER",
+                "userRole", savedUserRole
+            ));
+
+    }
+
+    @PostMapping("/test-make-system-admin")
+    public ResponseEntity<?> makeSystemAdmin(@RequestBody Map<String, Object> req,
+                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+        permissionValidator.validateSystemAdminPermissions(userDetails.getUser().isSystemAdmin());
+
+        Integer userId = Integer.valueOf(req.get("userId").toString());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user với ID: " + userId));
+
+        user.setSystemAdmin(true);
+        userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Đã gán quyền SYSTEM ADMIN cho user!",
+                "userId", user.getId(),
+                "userEmail", user.getEmail(),
+                "isSystemAdmin", user.isSystemAdmin()
+        ));
+    }
 }

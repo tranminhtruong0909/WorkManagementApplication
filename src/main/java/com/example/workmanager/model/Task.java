@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "Task")
@@ -36,7 +38,15 @@ public class Task {
     @JoinColumn(name = "group_id", nullable = false)
     private Group group;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assignee_id")
-    private User assignee;
+    // Thay thế field assignee cũ
+    @ManyToMany
+    @JoinTable(
+            name = "task_assignees",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private List<User> assignees = new ArrayList<>();
+
+    @ManyToOne
+    private User creator;
 }

@@ -9,13 +9,10 @@ import lombok.Data;
 @Data
 public class LoginRequest {
 
-    @NotBlank(message = "Email không được để trống")
-    @NotNull(message = "Email không được null")
     @Email(message = "Email không đúng định dạng")
     private String email;
 
-    @NotBlank(message = "Mật khẩu không được để trống")
-    @NotNull(message = "Mật khẩu không được null")
-    @Size(min = 1, message = "Mật khẩu phải có ít nhất 1 ký tự")
+    @Size(min = 6, message = "Mật khẩu phải có ít nhất 6 kí tự")
     private String password;
+
 }

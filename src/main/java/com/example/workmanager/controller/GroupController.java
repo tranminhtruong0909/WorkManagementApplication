@@ -1,14 +1,18 @@
 package com.example.workmanager.controller;
 
-import com.example.workmanager.dto.GroupResponse;
-import com.example.workmanager.dto.TaskResponse;
+import com.example.workmanager.dto.response.GroupResponse;
+import com.example.workmanager.dto.response.TaskResponse;
+import com.example.workmanager.exceptions.ResourceNotFoundException;
 import com.example.workmanager.model.CustomUserDetails;
 import com.example.workmanager.model.Group;
 import com.example.workmanager.model.User;
 import com.example.workmanager.service.GroupService;
-import com.example.workmanager.service.PermissionService;
 import com.example.workmanager.service.TaskService;
+import com.example.workmanager.service.PermissionFacade;
+import com.example.workmanager.util.PermissionValidator;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,123 +29,125 @@ public class GroupController {
 
     private final GroupService groupService;
     private final TaskService taskService;
-    private final PermissionService permissionService;
+    private final PermissionFacade permissionFacade;
+    private final PermissionValidator permissionValidator;
 
-    // ✅ Tạo group mới
     @PostMapping
-    public ResponseEntity<?> createGroup(@RequestBody Map<String, Object> request,
-                                         @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            User user = userDetails.getUser();
-            String name = (String) request.get("name");
-            Object boardIdObj = request.get("boardId");
+    public ResponseEntity<GroupResponse> createGroup(@RequestBody Map<String, Object> request,
+                                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
 
-            if (name == null || boardIdObj == null) {
-                return ResponseEntity.badRequest().body("Missing 'name' or 'boardId'");
-            }
-
-            Integer boardId;
-            if (boardIdObj instanceof Integer) {
-                boardId = (Integer) boardIdObj;
-            } else if (boardIdObj instanceof Number) {
-                boardId = ((Number) boardIdObj).intValue();
-            } else {
-                return ResponseEntity.badRequest().body("Invalid 'boardId' format");
-            }
-
-            if (!permissionService.canManageBoard(user.getId(), boardId)) {
-                return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-            }
-
-            Group group = groupService.createGroup(name, boardId);
-            return ResponseEntity.ok(new GroupResponse(group));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
-        }
-    }
-
-    // ✅ Lấy tất cả group
-    @GetMapping
-    public ResponseEntity<List<GroupResponse>> getAllGroups(@AuthenticationPrincipal CustomUserDetails userDetails) {
         User user = userDetails.getUser();
-        List<Group> groups = groupService.getAllGroups();
-        List<GroupResponse> responses = groups.stream()
-                .filter(group -> permissionService.canViewBoard(user.getId(), group.getBoard().getId()))
-                .map(GroupResponse::new)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(responses);
-    }
+        String name = (String) request.get("name");
+        Object boardIdObj = request.get("boardId");
 
-    // ✅ Lấy group theo ID
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getGroupById(@PathVariable Integer id, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        User user = userDetails.getUser();
-        var groupOpt = groupService.getGroupById(id);
-        if (groupOpt.isEmpty()) return ResponseEntity.notFound().build();
-        Group group = groupOpt.get();
-        Integer boardId = group.getBoard().getId();
-        if (!permissionService.canViewBoard(user.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+        if(name == null || boardIdObj == null){
+            throw new ResourceNotFoundException("Missing 'name' or 'boarId'");
         }
+
+        Integer boarId;
+        if (boardIdObj instanceof Integer) {
+            boarId = (Integer) boardIdObj;
+        } else if (boardIdObj instanceof Number) {
+            boarId = ((Number) boardIdObj).intValue();
+        } else {
+            throw new ResourceNotFoundException("Invalid 'boarId' format");
+        }
+
+        permissionValidator.validateGroupManagePermission(user.getId(), boarId);
+
+        Group group = groupService.createGroup(name, boarId);
         return ResponseEntity.ok(new GroupResponse(group));
     }
 
-    // ✅ Cập nhật group
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updateGroup(@PathVariable Integer id, @RequestBody Map<String, Object> request,
-                                         @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            User user = userDetails.getUser();
-            Group group = groupService.getGroupById(id).orElse(null);
-            if (group == null) return ResponseEntity.notFound().build();
-            Integer boardId = group.getBoard().getId();
-            if (!permissionService.canManageBoard(user.getId(), boardId)) {
-                return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-            }
-            String name = (String) request.get("name");
-            if (name == null) {
-                return ResponseEntity.badRequest().body("Missing 'name'");
-            }
+    @GetMapping
+    public ResponseEntity<List<GroupResponse>> getAllGroups(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
 
-            Group updatedGroup = groupService.updateGroup(id, name);
-            return ResponseEntity.ok(new GroupResponse(updatedGroup));
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
-    }
-
-    // ✅ Xoá group
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteGroup(@PathVariable Integer id,
-                                         @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            User user = userDetails.getUser();
-            Group group = groupService.getGroupById(id).orElse(null);
-            if (group == null) return ResponseEntity.notFound().build();
-            Integer boardId = group.getBoard().getId();
-            if (!permissionService.canManageBoard(user.getId(), boardId)) {
-                return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
-            }
-            groupService.deleteGroup(id);
-            return ResponseEntity.ok().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-
-        }
-    }
-
-    // ✅ Lấy danh sách task trong group
-    @GetMapping("/{id}/tasks")
-    public ResponseEntity<?> getTasksByGroupId(@PathVariable Integer id, @AuthenticationPrincipal CustomUserDetails userDetails) {
         User user = userDetails.getUser();
-        var groupOpt = groupService.getGroupById(id);
-        if (groupOpt.isEmpty()) return ResponseEntity.notFound().build();
-        Group group = groupOpt.get();
+        List<Group> groups = groupService.getAllGroup();
+
+        List<GroupResponse> responses = groups.stream()
+                .filter(group -> {
+                    try {
+                        permissionValidator.validateGroupViewPermission(user.getId(), group.getBoard().getId());
+                        return true;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .map(GroupResponse::new)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(responses);
+    }
+
+    @GetMapping("/{groupId}")
+    public ResponseEntity<GroupResponse> getGroupById(@PathVariable Integer groupId,
+                                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
+        User user = userDetails.getUser();
+        Group group = groupService.getGroupById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
         Integer boardId = group.getBoard().getId();
-        if (!permissionService.canViewBoard(user.getId(), boardId)) {
-            return ResponseEntity.status(403).body("Bạn không có quyền thực hiện chức năng này!");
+        permissionValidator.validateGroupViewPermission(user.getId(), boardId);
+
+        return ResponseEntity.ok(new GroupResponse(group));
+    }
+
+    @PutMapping("/{groupId}")
+    public ResponseEntity<GroupResponse> updateGroup(@PathVariable Integer groupId,
+                                                     @RequestBody Map<String, Object> request,
+                                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
+        User user = userDetails.getUser();
+        Group group = groupService.getGroupById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        Integer boardId = group.getBoard().getId();
+        permissionValidator.validateGroupEditPermission(user.getId(), boardId);
+
+        String name = (String) request.get("name");
+        if (name == null) {
+            throw new ResourceNotFoundException("Missing 'name'");
         }
-        List<TaskResponse> tasks = taskService.getTasksByGroupId(id);
+
+        Group updatedGroup = groupService.updateGroup(groupId, name);
+        return ResponseEntity.ok(new GroupResponse(updatedGroup));
+    }
+
+    @DeleteMapping("/{groupId}")
+    public ResponseEntity<?> deleteGroup(@PathVariable Integer groupId,
+                                         @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
+        User user = userDetails.getUser();
+        Group group = groupService.getGroupById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        Integer boardId = group.getBoard().getId();
+        permissionValidator.validateGroupDeletePermission(user.getId(), boardId);
+
+        groupService.deleteGroup(groupId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{groupId}/tasks")
+    public ResponseEntity<List<TaskResponse>> getTaskByGroupId(@PathVariable Integer groupId,
+                                                               @AuthenticationPrincipal CustomUserDetails userDetails) {
+        permissionValidator.validateUserAuthentication(userDetails);
+
+        User user = userDetails.getUser();
+        Group group = groupService.getGroupById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + groupId));
+
+        Integer boardId = group.getBoard().getId();
+        permissionValidator.validateGroupViewPermission(user.getId(), boardId);
+
+        List<TaskResponse> tasks = taskService.getTasksByGroupId(groupId);
         return ResponseEntity.ok(tasks);
     }
 }

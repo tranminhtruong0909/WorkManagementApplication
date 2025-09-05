@@ -6,6 +6,7 @@ import com.example.workmanager.model.Task;
 import com.example.workmanager.repository.BoardRepository;
 import com.example.workmanager.repository.GroupRepository;
 import com.example.workmanager.repository.TaskRepository;
+import com.example.workmanager.exceptions.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,10 +21,17 @@ public class GroupService {
     private final BoardRepository boardRepository;
     private final TaskRepository taskRepository;
 
-    // ✅ Tạo group mới
-    public Group createGroup(String name, Integer boardId) {
-        Board board = boardRepository.findById(boardId)
-                .orElseThrow(() -> new RuntimeException("Board not found with id: " + boardId));
+    public Optional<Group> getGroupWithBoard(Integer id) {
+        return groupRepository.findById(id);
+    }
+
+    public List<Group> getAllGroupsWithBoards() {
+        return groupRepository.findAll();
+    }
+
+    public Group createGroup(String name , Integer broadId) {
+        Board board = boardRepository.findById(broadId).
+                orElseThrow(() -> new ResourceNotFoundException("Board not found with id: " + broadId));
 
         Group group = new Group();
         group.setName(name);
@@ -32,34 +40,33 @@ public class GroupService {
         return groupRepository.save(group);
     }
 
-    // ✅ Cập nhật group
-    public Group updateGroup(Integer id, String name) {
+    public Group updateGroup(Integer id, String name){
         Group group = groupRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Group not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + id));
 
         group.setName(name);
         return groupRepository.save(group);
     }
 
-    // ✅ Xoá group
-    public void deleteGroup(Integer id) {
+    public void deleteGroup(Integer id){
         Group group = groupRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Group not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Group not found with id: " + id));
+
         groupRepository.delete(group);
     }
 
-    // ✅ Lấy group theo ID
-    public Optional<Group> getGroupById(Integer id) {
+    public Optional<Group> getGroupById(Integer id){
         return groupRepository.findById(id);
     }
 
-    // ✅ Lấy toàn bộ group
-    public List<Group> getAllGroups() {
+    public List<Group> getAllGroup(){
         return groupRepository.findAll();
     }
 
-    // ✅ Lấy task trong group (nếu cần dùng trực tiếp tại đây)
-    public List<Task> getTasksByGroupId(Integer groupId) {
-        return taskRepository.findByGroupId(groupId);
+    public List<Task> getTaskByGroupId(Integer groupid){
+        if(!groupRepository.existsById(groupid)){
+            throw new ResourceNotFoundException("Group not found with id: " + groupid);
+        }
+        return  taskRepository.findByGroupId(groupid);
     }
 }

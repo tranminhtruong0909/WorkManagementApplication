@@ -1,24 +1,22 @@
 package com.example.workmanager.service;
 
-import com.example.workmanager.dto.TaskResponse;
-import com.example.workmanager.dto.TaskSearchRequest;
+import com.example.workmanager.dto.response.TaskResponse;
+import com.example.workmanager.dto.request.TaskSearchRequest;
 import com.example.workmanager.model.*;
-import com.example.workmanager.repository.GroupRepository;
-import com.example.workmanager.repository.TaskRepository;
+import com.example.workmanager.repository.*;
+import com.example.workmanager.repository.specification.TaskSpecification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Sort;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,14 +24,15 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final GroupRepository groupRepository;
-    private final PermissionService permissionService;
+    private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepo;
+    private final BoardRepository boardRepository;
+    private final PermissionFacade permissionFacade;
 
-    // ✅ getAllTasks - trả về Task entity
     public List<Task> getAllTaskEntities() {
         return taskRepository.findAll();
     }
 
-    // ✅ getAllTasks - trả về TaskResponse (giữ nguyên cho backward compatibility)
     public List<TaskResponse> getAllTasks() {
         return taskRepository.findAll()
                 .stream()
@@ -41,91 +40,62 @@ public class TaskService {
                 .collect(Collectors.toList());
     }
 
-    // ✅ getTaskById - trả về Task entity
     public Optional<Task> getTaskEntityById(Integer id) {
         return taskRepository.findById(id);
     }
 
-    // ✅ getTaskById - trả về TaskResponse (giữ nguyên cho backward compatibility)
-    public Optional<TaskResponse> getTaskById(Integer id) {
-        return taskRepository.findById(id).map(TaskResponse::new);
-    }
-
-    // Method đếm tổng số task (để tính phân trang)
     public long countTasksUnified(TaskSearchRequest searchRequest, User user) {
-        TaskStatus status = null;
-        if (searchRequest.getStatus() != null && !searchRequest.getStatus().trim().isEmpty()) {
-            try {
-                status = TaskStatus.valueOf(searchRequest.getStatus().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                return 0;
-            }
-        }
+        TaskStatus status = convertStringToTaskStatus(searchRequest.getStatus());
 
-        // Đếm từ database
-        long totalCount;
-        if (!searchRequest.hasAnyFilter()) {
-            totalCount = taskRepository.count();
-        } else {
-            // Cần thêm method count trong repository
-            totalCount = taskRepository.countSearchTasksUnified(
-                    searchRequest.getName(),
-                    status,
-                    searchRequest.getGroupId(),
-                    searchRequest.getAssigneeId(),
-                    searchRequest.getSearchDate(),
-                    searchRequest.getStartDate(),
-                    searchRequest.getEndDate()
-            );
-        }
+        Specification<Task> spec = TaskSpecification.searchTasks(
+                searchRequest.getName(),
+                status,
+                searchRequest.getGroupId(),
+                searchRequest.getAssigneeId(),
+                searchRequest.getSearchDate(),
+                searchRequest.getStartDate(),
+                searchRequest.getEndDate()
+        );
 
-        return totalCount;
+        return taskRepository.count(spec);
     }
 
-    // Method tìm kiếm thống nhất (giữ nguyên method cũ)
-    public List<TaskResponse> searchTasksUnified(TaskSearchRequest searchRequest, User user) {
-        TaskStatus status = null;
-        if (searchRequest.getStatus() != null && !searchRequest.getStatus().trim().isEmpty()) {
-            try {
-                status = TaskStatus.valueOf(searchRequest.getStatus().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new RuntimeException("Trạng thái không hợp lệ: " + searchRequest.getStatus());
-            }
-        }
+    public Page<TaskResponse> searchTasksUnified(TaskSearchRequest searchRequest, User user) {
+        TaskStatus status = convertStringToTaskStatus(searchRequest.getStatus());
 
-        // Tạo Pageable cho sắp xếp và phân trang
         Sort sort = Sort.by(
-                searchRequest.getSortDirection().equalsIgnoreCase("desc") ?
-                        Sort.Direction.DESC : Sort.Direction.ASC,
+                searchRequest.getSortDirection().equalsIgnoreCase("desc")
+                        ? Sort.Direction.DESC : Sort.Direction.ASC,
                 getSortField(searchRequest.getSortBy())
         );
         Pageable pageable = PageRequest.of(searchRequest.getPage(), searchRequest.getSize(), sort);
 
-        // Lấy data với phân trang từ DB
-        Page<Task> taskPage;
-        if (!searchRequest.hasAnyFilter()) {
-            taskPage = taskRepository.findAll(pageable);
-        } else {
-            taskPage = taskRepository.searchTasksUnified(
-                    searchRequest.getName(),
-                    status,
-                    searchRequest.getGroupId(),
-                    searchRequest.getAssigneeId(),
-                    searchRequest.getSearchDate(),
-                    searchRequest.getStartDate(),
-                    searchRequest.getEndDate(),
-                    pageable
-            );
-        }
+        Specification<Task> spec = TaskSpecification.searchTasks(
+                searchRequest.getName(),
+                status,
+                searchRequest.getGroupId(),
+                searchRequest.getAssigneeId(),
+                searchRequest.getSearchDate(),
+                searchRequest.getStartDate(),
+                searchRequest.getEndDate()
+        );
 
-        // Lọc theo quyền và convert sang TaskResponse
-        return taskPage.getContent().stream()
-                .filter(task -> permissionService.canViewBoard(user.getId(), task.getGroup().getBoard().getId()))
-                .map(TaskResponse::new)
-                .collect(Collectors.toList());
+        Page<Task> taskPage = taskRepository.findAll(spec, pageable);
+
+        return taskPage.map(TaskResponse::new);
     }
 
-    // Helper method để map sort field với đúng tên field trong entity
+    private TaskStatus convertStringToTaskStatus(String statusStr) {
+        if (statusStr != null && !statusStr.trim().isEmpty()) {
+            try {
+                return TaskStatus.valueOf(statusStr.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     private String getSortField(String sortBy) {
         Map<String, String> sortFieldMap = new HashMap<>();
         sortFieldMap.put("id", "id");
@@ -135,21 +105,20 @@ public class TaskService {
         sortFieldMap.put("timelineStart", "timelineStart");
         sortFieldMap.put("timelineEnd", "timelineEnd");
         sortFieldMap.put("notes", "notes");
-        sortFieldMap.put("groupName", "group.name");  // Đúng với @ManyToOne field "group"
+        sortFieldMap.put("groupName", "group.name");
         sortFieldMap.put("groupId", "group.id");
-        sortFieldMap.put("assigneeName", "assignee.name"); // Nếu có assignee
+        sortFieldMap.put("assigneeName", "assignee.name");
         sortFieldMap.put("assigneeId", "assignee.id");
 
         return sortFieldMap.getOrDefault(sortBy, "id");
     }
 
-    // ✅ updateTask (PATCH: status + notes)
     public Task updateTask(Integer taskId, String status, String notes, User user) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
 
         Integer boardId = task.getGroup().getBoard().getId();
-        if (!permissionService.canEditTask(user.getId(), boardId, task)) {
+        if (!permissionFacade.canEditTask(user.getId(), boardId, task)) {
             throw new RuntimeException("Bạn không có quyền cập nhật task này");
         }
 
@@ -159,7 +128,6 @@ public class TaskService {
         return taskRepository.save(task);
     }
 
-    // ✅ updateTaskFullWithPermission (PUT: toàn bộ task)
     public Task updateTaskFullWithPermission(Integer id, String name, String status,
                                              LocalDate dueDate, LocalDate timelineStart,
                                              LocalDate timelineEnd, String notes, User user) {
@@ -167,7 +135,7 @@ public class TaskService {
                 .orElseThrow(() -> new RuntimeException("Task không tồn tại"));
 
         Integer boardId = task.getGroup().getBoard().getId();
-        if (!permissionService.canEditTask(user.getId(), boardId, task)) {
+        if (!permissionFacade.canEditTask(user.getId(), boardId, task)) {
             throw new RuntimeException("Bạn không có quyền chỉnh sửa task này");
         }
 
@@ -185,7 +153,214 @@ public class TaskService {
         return taskRepository.save(task);
     }
 
-    // ✅ createTask (giữ nguyên như cũ)
+    public void deleteTask(Integer id) {
+        taskRepository.deleteById(id);
+    }
+
+    public List<TaskResponse> getTasksByGroupId(Integer groupId) {
+        return taskRepository.findByGroupId(groupId)
+                .stream()
+                .map(TaskResponse::new)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void assignMemberRoleIfNeeded(Integer userId, Integer boardId) {
+        boolean hasRole = userRoleRepo.findByUserIdAndBoardId(userId, boardId).isPresent();
+
+        if (!hasRole) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
+
+            Board board = boardRepository.findById(boardId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy board"));
+
+            UserRole memberRole = new UserRole();
+            memberRole.setUser(user);
+            memberRole.setBoard(board);
+            memberRole.setRole(Role.MEMBER);
+            userRoleRepo.save(memberRole);
+        }
+    }
+
+
+    @Transactional
+    public Task addAssigneeToTask(Integer taskId, Integer userId, User currentUser) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+
+        User userToAdd = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
+
+        Integer boardId = task.getGroup().getBoard().getId();
+
+        assignMemberRoleIfNeeded(userId, boardId);
+
+        if (!permissionFacade.canChangeAssignee(currentUser.getId(), boardId, userId)) {
+            throw new RuntimeException("Bạn không có quyền thêm assignee này");
+        }
+
+        if (!task.getAssignees().contains(userToAdd)) {
+            task.getAssignees().add(userToAdd);
+            return taskRepository.save(task);
+        }
+
+        return task;
+    }
+
+    @Transactional
+    public Task addMultipleAssigneesToTask(Integer taskId, List<Integer> userIds, User currentUser) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+
+        Integer boardId = task.getGroup().getBoard().getId();
+
+        for (Integer userId : userIds) {
+            User userToAdd = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user với ID: " + userId));
+
+            assignMemberRoleIfNeeded(userId, boardId);
+
+            if (!permissionFacade.canChangeAssignee(currentUser.getId(), boardId, userId)) {
+                throw new RuntimeException("Bạn không có quyền thêm assignee với ID: " + userId);
+            }
+
+            if (!task.getAssignees().contains(userToAdd)) {
+                task.getAssignees().add(userToAdd);
+            }
+        }
+        return taskRepository.save(task);
+    }
+
+    @Transactional
+    public Task removeAssigneeFromTask(Integer taskId, Integer userId, User currentUser) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+
+        User userToRemove = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
+
+        Integer boardId = task.getGroup().getBoard().getId();
+
+        if (!permissionFacade.canChangeAssignee(currentUser.getId(), boardId, userId)) {
+            throw new RuntimeException("Bạn không có quyền xoá assignee này");
+        }
+
+        task.getAssignees().remove(userToRemove);
+        return taskRepository.save(task);
+    }
+
+    public List<User> getTaskAssignees(Integer taskId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+        return task.getAssignees();
+    }
+
+    @Transactional
+    public Task createTask(String name, Integer groupId, String status,
+                           LocalDate dueDate, LocalDate timelineStart,
+                           LocalDate timelineEnd, String notes, List<Integer> assigneeIds, User creator) {
+
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy group"));
+
+        Task task = new Task();
+        task.setName(name);
+        task.setGroup(group);
+        task.setStatus(TaskStatus.valueOf(status.toUpperCase()));
+        task.setDueDate(dueDate);
+        task.setTimelineStart(timelineStart);
+        task.setTimelineEnd(timelineEnd);
+        task.setNotes(notes);
+        task.setCreator(creator);
+
+        Integer boardId = group.getBoard().getId();
+
+        if (assigneeIds != null && !assigneeIds.isEmpty()) {
+            List<User> assignees = userRepository.findAllById(assigneeIds);
+            for (User assignee : assignees) {
+                assignMemberRoleIfNeeded(assignee.getId(), boardId);
+            }
+            task.setAssignees(assignees);
+        }
+
+        return taskRepository.save(task);
+    }
+
+    @Transactional
+    public Task updateTaskFullWithPermission(Integer id, String name, String status,
+                                             LocalDate dueDate, LocalDate timelineStart,
+                                             LocalDate timelineEnd, String notes,
+                                             List<Integer> assigneeIds, User user) {
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Task không tồn tại"));
+
+        Integer boardId = task.getGroup().getBoard().getId();
+        if (!permissionFacade.canEditTask(user.getId(), boardId, task)) {
+            throw new RuntimeException("Bạn không có quyền chỉnh sửa task này");
+        }
+
+        task.setName(name != null ? name : task.getName());
+
+        if (status != null) {
+            task.setStatus(TaskStatus.valueOf(status.toUpperCase()));
+        }
+
+        task.setDueDate(dueDate);
+        task.setTimelineStart(timelineStart);
+        task.setTimelineEnd(timelineEnd);
+        task.setNotes(notes);
+
+        if (assigneeIds != null) {
+            List<User> assignees = userRepository.findAllById(assigneeIds);
+            for (User assignee : assignees) {
+                assignMemberRoleIfNeeded(assignee.getId(), boardId);
+            }
+            task.setAssignees(assignees);
+        }
+
+        return taskRepository.save(task);
+    }
+
+    @Transactional
+    public Task updateTaskAssignees(Integer taskId, List<Integer> assigneeIds, User currentUser) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+
+        Integer boardId = task.getGroup().getBoard().getId();
+
+        if (!permissionFacade.canChangeAssignee(currentUser.getId(), boardId)) {
+            throw new RuntimeException("Bạn không có quyền quản lý assignees của task này");
+        }
+
+        if (assigneeIds != null) {
+            for (Integer userId : assigneeIds) {
+                assignMemberRoleIfNeeded(userId, boardId);
+            }
+        }
+
+        List<User> assignees = userRepository.findAllById(assigneeIds);
+        task.setAssignees(assignees);
+
+        return taskRepository.save(task);
+    }
+
+    public boolean isUserAssignee(Integer taskId, Integer userId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy task"));
+
+        return task.getAssignees().stream()
+                .anyMatch(user -> user.getId().equals(userId));
+    }
+
+    public List<TaskResponse> getTasksByAssignee(Integer userId) {
+        return taskRepository.findByAssigneesId(userId)
+                .stream()
+                .map(TaskResponse::new)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
     public Task createTask(String name, Integer groupId, String status,
                            LocalDate dueDate, LocalDate timelineStart,
                            LocalDate timelineEnd, String notes) {
@@ -201,19 +376,8 @@ public class TaskService {
         task.setTimelineStart(timelineStart);
         task.setTimelineEnd(timelineEnd);
         task.setNotes(notes);
-
         return taskRepository.save(task);
     }
 
-    // ✅ deleteTask
-    public void deleteTask(Integer id) {
-        taskRepository.deleteById(id);
-    }
-    public List<TaskResponse> getTasksByGroupId(Integer groupId) {
-        return taskRepository.findByGroupId(groupId)
-                .stream()
-                .map(TaskResponse::new)
-                .collect(Collectors.toList());
-    }
 
 }
